@@ -1,58 +1,58 @@
 // web/src/hooks/useWebsiteConfig.js
 import { useState, useEffect } from "react";
 
-/* ---------- helpers ---------- */
 const trim = (s) => String(s ?? "").trim();
 const noTrail = (s) => trim(s).replace(/\/+$/, "");
 
-/** Resolve the API base:
- *  1) build-time env: REACT_APP_API_BASE (recommended on Vercel)
- *  2) optional runtime global: window.__WOSS_API_BASE
- *  3) fallback: same-origin (assumes a reverse proxy at /api)
- */
+// Resolve API base (build-time via REACT_APP_API_BASE, or optional runtime override)
 function resolveApiBase() {
-  const envBase = noTrail(process.env.REACT_APP_API_BASE || "");
+  const envBase = trim(process.env.REACT_APP_API_BASE);
   const runtimeBase =
-    typeof window !== "undefined" ? noTrail(window.__WOSS_API_BASE || "") : "";
-  return envBase || runtimeBase || ""; // empty means same-origin fallback
+    typeof window !== "undefined" ? trim(window.__WOSS_API_BASE) : "";
+  return noTrail(envBase || runtimeBase || "");
 }
 
-export default function useWebsiteConfig() {
+async function tryFetchJson(url, signal) {
+  const res = await fetch(url, { signal, cache: "no-store" });
+  // If 404 on the first pattern, the caller will try the fallback
+  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+  return res.json().catch(() => ({}));
+}
+
+const useWebsiteConfig = () => {
   const [config, setConfig] = useState(null);
 
   useEffect(() => {
     const base = resolveApiBase();
-    const url = base ? `${base}/api/website/config` : `/api/website/config`;
+    // If no base is provided, we’ll use relative paths
+    const primary = base ? `${base}/api/website/config` : `/api/website/config`;
+    const fallback = base ? `${base}/website/config` : `/website/config`;
+
     const ctrl = new AbortController();
 
     (async () => {
       try {
-        const res = await fetch(url, {
-          signal: ctrl.signal,
-          cache: "no-store",
-          // credentials: "include", // <- only if your API uses cookies here
-          mode: "cors",
-        });
-
-        // If CORS blocks, surface a clearer hint
-        if (!res.ok) {
-          console.error(
-            `Website config request failed (${res.status}).`,
-            `URL: ${url}`,
-            `Tip: ensure CORS allows ${typeof window !== "undefined" ? window.location.origin : ""} on the API.`
-          );
+        let data;
+        try {
+          data = await tryFetchJson(primary, ctrl.signal);
+        } catch (err) {
+          // Fallback if the /api/... variant 404s or is missing
+          if (err?.status === 404 || err?.status === 405) {
+            data = await tryFetchJson(fallback, ctrl.signal);
+          } else {
+            throw err;
+          }
         }
 
-        const data = await res.json().catch(() => ({}));
         if (data?.success && data?.config) {
           const domain = noTrail(data.config.domain || base || "");
           setConfig({ ...data.config, domain });
         } else {
-          console.error("Website config: unexpected payload", data);
+          console.error("Website config: unexpected payload:", data);
         }
       } catch (err) {
         if (err?.name !== "AbortError") {
-          console.error("Website config: fetch failed", err, "URL:", url);
+          console.error("Website config: fetch failed:", err);
         }
       }
     })();
@@ -61,4 +61,6 @@ export default function useWebsiteConfig() {
   }, []);
 
   return config;
-}
+};
+
+export default useWebsiteConfig;
