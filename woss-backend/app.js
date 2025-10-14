@@ -5,7 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
-const { corsOptions } = require("./config/db");
+const { corsOptions, websiteConfig } = require("./config/db"); // ← add websiteConfig here
 const verifyToken = require("./middleware/verifyToken");
 const {
   ensureDirs,
@@ -76,13 +76,18 @@ app.use("/api", (req, res, next) => {
   const isOpen =
     p.startsWith("/auth") ||
     p.startsWith("/website") ||     // e.g. /api/website/config
-    p.startsWith("/health") ||      // <-- now health is open
+    p.startsWith("/health") ||      // health is open
     p.startsWith("/withdrawals/exports") ||
     p.startsWith("/royalties/exports");
 
   if (isOpen) return next();
   return verifyToken(req, res, next);
 });
+
+/* ✅ Hard-wire this endpoint to guarantee it never gets shadowed */
+app.get("/api/website/config", (_req, res) =>
+  res.json({ success: true, config: websiteConfig })
+);
 
 /* ---------- Mount specific /api routers FIRST ---------- */
 app.use("/api/website", require("./routes/website"));
@@ -106,7 +111,7 @@ app.use("/api/system", require("./routes/system"));
 app.use("/api/withdrawals/exports", express.static(EXPORTS_DIR));
 app.use("/api/royalties/exports", express.static(ROYALTIES_DIR));
 
-/* ---------- Health (now open thanks to the wall) ---------- */
+/* ---------- Health (open) ---------- */
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, uptime: process.uptime(), node: process.version })
 );
