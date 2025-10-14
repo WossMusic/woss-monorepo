@@ -1,0 +1,15 @@
+.loader {
+    border: 6px solid rgba(0, 198, 169, 0.2); /* color de fondo sutil */
+    border-top: 6px solid #00c6a9;           /* color de Woss activo */
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 0.9s linear infinite;
+    box-shadow: 0 0 10px rgba(0, 198, 169, 0.4);
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  

@@ -1,0 +1,178 @@
+/* react-select customization */
+.react-select__control {
+  background-color: #006e6e !important;
+  border: none !important;
+  border-radius: 0.375rem !important;
+  min-height: 45px !important;
+  height: 45px !important;
+  box-shadow: none !important;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.react-select__input-container {
+  color: #fff !important;
+}
+
+.react-select__single-value {
+  color: #fff !important;
+}
+
+.react-select__placeholder {
+  color: #bbb !important;
+}
+
+.react-select__menu {
+  background-color: #006e6e !important;
+  border-radius: 0.375rem !important;
+  margin-top: 2px;
+}
+
+.react-select__option {
+  background-color: #006e6e !important;
+  color: #fff !important;
+  cursor: pointer;
+}
+
+.react-select__option--is-focused {
+  background-color: #41938e !important;
+}
+
+.react-select__dropdown-indicator {
+  color: #bbb !important;
+}
+
+.react-select__indicator-separator {
+  background-color: transparent !important;
+}
+
+/*////////////////////////////////////*/
+/* react-select2 customization */
+
+.react-select2__control {
+  background-color: #fff !important;
+  border: none !important;
+  border-radius: 0.375rem !important;
+  min-height: 45px !important;
+  height: 45px !important;
+  box-shadow: none !important;
+  padding-left: 0.20rem;
+  padding-right: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.react-select2__input-container {
+  color: #212529 !important;
+}
+
+.react-select2__single-value {
+  color: #212529 !important;
+}
+
+.react-select2__placeholder {
+  color: #828282 !important;
+}
+
+.react-select2__menu {
+  background-color: #c8c8c8 !important;
+  border-radius: 0.375rem !important;
+  margin-top: 2px;
+}
+
+.react-select2__option {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+  cursor: pointer;
+}
+
+.react-select2__option--is-focused {
+  background-color: #cecece !important;
+}
+
+.react-select2__dropdown-indicator {
+  color: #bbb !important;
+}
+
+.react-select2__indicator-separator {
+  background-color: transparent !important;
+}
+
+.react-select2-container.has-warning .react-select2__control {
+  border: 2px solid #FBB03B !important;
+}
+
+/* ===================================================================
+   READ-ONLY / DISABLED LOOK (for both react-select & react-select2)
+   - No opacity dim
+   - Background: #ced4da
+   - Text color: #000
+   - Not-allowed cursor
+   =================================================================== */
+
+/* Control state */
+.react-select__control--is-disabled,
+.react-select2__control--is-disabled {
+  background-color: #ced4da !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+}
+
+/* Keep background consistent on hover when disabled */
+.react-select__control--is-disabled:hover,
+.react-select2__control--is-disabled:hover {
+  background-color: #ced4da !important;
+  border-color: inherit !important;
+}
+
+/* Value/placeholder text */
+.react-select__control--is-disabled .react-select__value-container,
+.react-select__control--is-disabled .react-select__single-value,
+.react-select__control--is-disabled .react-select__placeholder,
+.react-select2__control--is-disabled .react-select2__value-container,
+.react-select2__control--is-disabled .react-select2__single-value,
+.react-select2__control--is-disabled .react-select2__placeholder {
+  color: #000 !important;
+}
+
+/* Input text (also Safari) */
+.react-select__control--is-disabled .react-select__input-container input,
+.react-select2__control--is-disabled .react-select2__input-container input {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  caret-color: transparent;
+}
+
+/* Indicators */
+.react-select__control--is-disabled .react-select__indicators,
+.react-select__control--is-disabled .react-select__indicator,
+.react-select2__control--is-disabled .react-select2__indicators,
+.react-select2__control--is-disabled .react-select2__indicator {
+  color: #000 !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+}
+
+/* Make the whole disabled control show not-allowed on hover */
+.react-select__control--is-disabled *:not(.react-select__menu),
+.react-select2__control--is-disabled *:not(.react-select2__menu) {
+  cursor: not-allowed !important;
+}
+
+/* LOCKED (read-only via custom class) */
+.react-select2-container.locked-select,
+.react-select2-container.locked-select * {
+  cursor: not-allowed !important;
+}
+
+/* Mirror the disabled look when locked-select is used */
+.react-select2-container.locked-select .react-select2__control {
+  background-color: #ced4da !important;
+}
+
+.react-select2-container.locked-select .react-select2__single-value,
+.react-select2-container.locked-select .react-select2__placeholder,
+.react-select2-container.locked-select .react-select2__input-container input {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+}

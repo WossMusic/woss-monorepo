@@ -1,0 +1,275 @@
+/* === Overlay === */
+.new-container-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1040;
+  }
+  
+/* Unique Contributor Remove Modal */
+.contributor-remove-modal {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 420px;
+    padding: 25px;
+    background-color: #56BCB6;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    z-index: 15;
+    text-align: left;
+  }
+  
+  /* Optional: matching backdrop fade */
+  .contributor-remove-modal::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(86, 188, 182, 0.4);
+    border-radius: 12px;
+    z-index: -1;
+  }
+  
+  .contributor-remove-modal h3 {
+    font-size: 20px;
+    font-weight: 600;
+  }
+  
+  .contributor-remove-modal .close-button {
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    font-size: 24px;
+    color: white;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  
+
+  /* === Modal === */
+  .styled-contributor-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #56BCB6; /* ✅ Updated background */
+    color: white;
+    border-radius: 12px;
+    padding: 2rem;
+    width: 540px; /* ✅ Wider */
+    max-width: 90vw;
+    z-index: 1050;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    text-align: center;
+  }
+  
+  /* === Modal Header === */
+  .modal-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+  }
+  
+  /* === Close Button (X) === */
+  .close-button {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    font-size: 22px;
+    color: white;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  
+  /* === Label + Input === */
+  .input-label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 14px;
+    color: white;
+    text-align: left;
+  }
+  
+  .styled-input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    font-size: 16px;
+    color: #333;
+    background: #f2f2f2;
+    margin-bottom: 0.5rem;
+  }
+  
+  .styled-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+  }
+  
+  /* === Contributor Result List === */
+  .results-scroll-container {
+    margin-top: 10px;
+    margin-bottom: 20px;
+    max-height: 240px;
+    min-height: 240px;
+    overflow-y: auto;
+    background-color: transparent; /* ✅ No background */
+    padding: 8px;
+  }
+  
+  /* === Result Row === */
+  .result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background-color: #006e6e; 
+    transition: background 0.2s ease-in-out;
+    color: white;
+    cursor: pointer;
+    margin-bottom: 6px;
+  }
+  
+  .result-item:hover {
+    background-color: #005656; 
+  }
+  
+  /* === Left Side of Result Row === */
+  .result-left {
+    display: flex;
+    align-items: center;
+  }
+  
+  .result-icon {
+    width: 38px;
+    height: 38px;
+    background: #56BCB6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+  }
+  
+  .result-details {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .contributor-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: white;
+  }
+  
+  .contributor-meta {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  
+  /* === Right Side Icons === */
+  .result-right i {
+    font-size: 18px;
+    color: white;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+  
+  .result-right i:hover {
+    opacity: 1;
+  }
+  
+  /* === Placeholder State === */
+  .placeholder-rows .result-item.placeholder {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  
+  .placeholder-text {
+    color: #ffffff66;
+    user-select: none;
+  }
+  
+  /* === Footer Buttons === */
+  .styled-button-container {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+  }
+  
+  .cancel-btn,
+  .submit-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 15px;
+    border: none;
+    transition: 0.2s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+  }
+  
+  .cancel-btn {
+    background: #e44040;
+    color: #fff;
+  }
+  
+  .cancel-btn:hover {
+    background: #ce0e0e;
+    color: #fff;
+  }
+  
+  .submit-btn {
+    background: #006e6e;
+    color: white;
+  }
+  
+  .submit-btn:hover {
+    background: #005959;
+  }
+
+  .frequent-container {
+    margin-top: 14px;
+  }
+  
+  .frequent-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    text-align: left;
+    margin-bottom: 12px;
+    padding-left: 4px;
+  }
+  
+  .frequent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 220px; /* or adjust */
+    overflow-y: auto;  /* <-- scroll automatically when needed */
+  }  
+  
+  /* Optional: allow right-side text to be aligned vertically */
+  .result-right {
+    text-align: right;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  

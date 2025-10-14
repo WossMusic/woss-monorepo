@@ -1,0 +1,17 @@
+﻿# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# Builds
+web/build/
+web/dist/
+build/
+dist/
+
+# Env
+.env
+.env.*
+.DS_Store
