@@ -8,12 +8,27 @@ const mime = require("mime-types");
 const transporter = require("../config/mail");
 const { parse } = require("csv-parse/sync");
 const { execute } = require("../config/db");
-const { generateEmailHTML } = require("../utils/emailTemplate"); // ← fixed
+const { generateEmailHTML } = require("../utils/emailTemplate");
 const verifyToken = require("../middleware/verifyToken");
-const upload = multer({ dest: "temp_uploads/" });
+
+// ✅ import from utils/paths (Vercel-safe dirs)
+const { TEMP_DIR, EXPORTS_DIR, ROYALTIES_DIR } = require("../utils/paths");
+
+// Multer storage that writes to a writable folder (Vercel => /tmp)
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, TEMP_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    cb(null, `${Date.now()}-${(file.fieldname || "file")}${ext}`);
+  },
+});
+const upload = multer({ storage });
+
+// (unchanged) helpers
 const countryNameMap = require(path.join(__dirname, "../utils/countryNameMap.json"));
 const { recordUserRoyaltyAdjustment, deleteImportedRoyalties } = require("../utils/royaltyUtils");
 const { isRoyaltiesEmailEnabled } = require("../utils/notifications");
+
 
 
 const toCurrency = (num) => {

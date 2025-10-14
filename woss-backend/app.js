@@ -1,11 +1,11 @@
+// woss-backend/app.js
 require("dotenv").config();
-
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
-const { corsOptions, execute } = require("./config/db");
+const { corsOptions } = require("./config/db");
 const verifyToken = require("./middleware/verifyToken");
 const {
   ensureDirs,
@@ -13,12 +13,13 @@ const {
   TEMP_DIR,
   EXPORTS_DIR,
   ROYALTIES_DIR,
-} = require("./utils/paths");
+} = require("./paths");
 
 const app = express();
+const isVercel = process.env.VERCEL === "1";
 
-/* ---------- Prepare writable folders (works on Vercel: /tmp) ---------- */
-ensureDirs();
+/* ---------- Ensure local folders (skip on Vercel; /tmp already exists) ---------- */
+if (!isVercel) ensureDirs();
 
 /* ---------- Basic hardening ---------- */
 app.set("trust proxy", 1);
@@ -36,8 +37,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
-/* ---------- Static (read-only bundle is OK for *serving*, not writing) ---------- */
-// These now point to writable dirs (local project in dev, /tmp on Vercel)
+/* ---------- Static (exports/uploads/temp) ---------- */
 app.use("/uploads", express.static(UPLOADS_DIR));
 app.use(
   "/temp",
@@ -54,8 +54,10 @@ app.use(
   })
 );
 
-// Optional: serve any public assets baked into the repo (read-only is fine)
+// optional public next to API (local use)
 app.use(express.static(path.join(__dirname, "../public")));
+
+// images inside repo (read-only, fine on Vercel)
 app.use("/assets/images", express.static(path.join(__dirname, "src", "assets", "images")));
 
 /* ---------- Open/Guarded API wall ---------- */
@@ -85,7 +87,7 @@ app.use("/api/withdrawals", require("./routes/withdrawals"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/system", require("./routes/system"));
 
-/* ---------- Static exports (served from writable dirs) ---------- */
+/* static exports (open) */
 app.use("/api/withdrawals/exports", express.static(EXPORTS_DIR));
 app.use("/api/royalties/exports", express.static(ROYALTIES_DIR));
 
@@ -94,57 +96,24 @@ app.get("/api/health", (req, res) =>
   res.json({ ok: true, uptime: process.uptime(), node: process.version })
 );
 
-/* ---------- Auto-distribute: on-demand (use Vercel Cron) ---------- */
-async function runAutoDistribute() {
-  const [result] = await execute(
-    `UPDATE releases
-       SET status = 'Distributed',
-           distributed_at = IFNULL(distributed_at, NOW())
-     WHERE UPPER(TRIM(status)) = 'APPROVED'
-       AND (
-             (product_release_date IS NOT NULL
-              AND TIMESTAMP(product_release_date, '00:00:00') <= NOW())
-          OR (approved_at IS NOT NULL
-              AND approved_at <= NOW())
-           )`
-  );
-  return result?.affectedRows || 0;
-}
-
-app.post("/api/system/auto-distribute", async (req, res, next) => {
-  try {
-    const secret = process.env.CRON_SECRET;
-    if (secret && req.headers["x-cron-secret"] !== secret) {
-      return res.status(401).json({ ok: false, message: "unauthorized" });
-    }
-    const updated = await runAutoDistribute();
-    res.json({ ok: true, updated });
-  } catch (err) {
-    next(err);
-  }
-});
-
 /* ---------- 404 / Error handlers ---------- */
 app.use((req, res, next) => {
-  if (req.path.startsWith("/api/"))
+  if (req.path.startsWith("/api/")) {
     return res.status(404).json({ success: false, message: "Not Found" });
+  }
   return next();
 });
-
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
-  if (!res.headersSent) {
-    res.status(err.status || 500).json({
-      success: false,
-      message: err.message || "Server Error",
-    });
-  }
+  if (res.headersSent) return next(err);
+  res
+    .status(err.status || 500)
+    .json({ success: false, message: err.message || "Server Error" });
 });
 
-/* ---------- Local dev ---------- */
-if (process.env.VERCEL !== "1" && process.env.NODE_ENV !== "production") {
+/* ---------- Local dev listener ---------- */
+if (!isVercel && process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 4000;
   app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
 }
-
 module.exports = app;
