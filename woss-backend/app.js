@@ -5,7 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
-const { corsOptions, websiteConfig } = require("./config/db"); // ← add websiteConfig here
+const { corsOptions, websiteConfig } = require("./config/db");
 const verifyToken = require("./middleware/verifyToken");
 const {
   ensureDirs,
@@ -69,14 +69,13 @@ app.use(express.static(path.join(__dirname, "../public")));
 app.use("/assets/images", express.static(path.join(__dirname, "src", "assets", "images")));
 
 /* ---------- Open/Guarded API wall ---------- */
-/* Make /api/health OPEN and mount /api/website before any generic /api routers */
 app.use("/api", (req, res, next) => {
   const p = (req.path || "").toLowerCase();
 
   const isOpen =
     p.startsWith("/auth") ||
-    p.startsWith("/website") ||     // e.g. /api/website/config
-    p.startsWith("/health") ||      // health is open
+    p.startsWith("/website") ||      // /api/website/config, etc
+    p.startsWith("/health") ||       // /api/health
     p.startsWith("/withdrawals/exports") ||
     p.startsWith("/royalties/exports");
 
@@ -84,17 +83,17 @@ app.use("/api", (req, res, next) => {
   return verifyToken(req, res, next);
 });
 
-/* ✅ Hard-wire this endpoint to guarantee it never gets shadowed */
+/* ✅ Hard-wire config endpoint so it can’t be shadowed */
 app.get("/api/website/config", (_req, res) =>
   res.json({ success: true, config: websiteConfig })
 );
 
 /* ---------- Mount specific /api routers FIRST ---------- */
 app.use("/api/website", require("./routes/website"));
-app.use("/website", require("./routes/website")); // fallback non-/api path
+app.use("/website", require("./routes/website")); // fallback non-/api path (same handler)
 
-/* ---------- Other API routes (some may be broad) ---------- */
-app.use("/api", require("./routes/distribute"));  // keep after specific mounts
+/* ---------- Other API routes ---------- */
+app.use("/api", require("./routes/distribute")); // keep after specific mounts
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/user", require("./routes/user"));
@@ -107,7 +106,7 @@ app.use("/api/withdrawals", require("./routes/withdrawals"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/system", require("./routes/system"));
 
-/* static exports (open) */
+/* ---------- Static exports (open) ---------- */
 app.use("/api/withdrawals/exports", express.static(EXPORTS_DIR));
 app.use("/api/royalties/exports", express.static(ROYALTIES_DIR));
 
