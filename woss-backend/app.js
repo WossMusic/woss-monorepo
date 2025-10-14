@@ -69,23 +69,29 @@ app.use(express.static(path.join(__dirname, "../public")));
 app.use("/assets/images", express.static(path.join(__dirname, "src", "assets", "images")));
 
 /* ---------- Open/Guarded API wall ---------- */
+/* Make /api/health OPEN and mount /api/website before any generic /api routers */
 app.use("/api", (req, res, next) => {
   const p = (req.path || "").toLowerCase();
+
   const isOpen =
     p.startsWith("/auth") ||
-    p.startsWith("/website") ||
+    p.startsWith("/website") ||     // e.g. /api/website/config
+    p.startsWith("/health") ||      // <-- now health is open
     p.startsWith("/withdrawals/exports") ||
     p.startsWith("/royalties/exports");
+
   if (isOpen) return next();
   return verifyToken(req, res, next);
 });
 
-/* ---------- Routes ---------- */
-app.use("/api", require("./routes/distribute"));
+/* ---------- Mount specific /api routers FIRST ---------- */
+app.use("/api/website", require("./routes/website"));
+app.use("/website", require("./routes/website")); // fallback non-/api path
+
+/* ---------- Other API routes (some may be broad) ---------- */
+app.use("/api", require("./routes/distribute"));  // keep after specific mounts
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
-app.use("/api/website", require("./routes/website"));
-app.use("/website", require("./routes/website")); // fallback path (non-/api)
 app.use("/api/user", require("./routes/user"));
 app.use("/api/royalties", require("./routes/royalties"));
 app.use("/api/splits", require("./routes/splits"));
@@ -100,7 +106,7 @@ app.use("/api/system", require("./routes/system"));
 app.use("/api/withdrawals/exports", express.static(EXPORTS_DIR));
 app.use("/api/royalties/exports", express.static(ROYALTIES_DIR));
 
-/* ---------- Health ---------- */
+/* ---------- Health (now open thanks to the wall) ---------- */
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, uptime: process.uptime(), node: process.version })
 );
