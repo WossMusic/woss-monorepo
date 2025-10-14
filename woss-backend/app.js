@@ -1,12 +1,15 @@
 // woss-backend/app.js
 require("dotenv").config();
+
 const path = require("path");
 const express = require("express");
-const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
-const { corsOptions, websiteConfig } = require("./config/db");
 const verifyToken = require("./middleware/verifyToken");
+
+// config/db exports both corsOptions (if you still want it) and websiteConfig
+const { websiteConfig } = require("./config/db");
+
 const {
   ensureDirs,
   UPLOADS_DIR,
@@ -18,26 +21,63 @@ const {
 const app = express();
 const isVercel = process.env.VERCEL === "1";
 
-/* ---------- Ensure local folders (skip on Vercel; /tmp already exists) ---------- */
+/* ----------------------------------------
+   0) Local writable folders (skip on Vercel)
+----------------------------------------- */
 if (!isVercel) ensureDirs();
 
-/* ---------- Basic hardening ---------- */
+/* ----------------------------------------
+   1) Hardening + parsers
+----------------------------------------- */
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(cookieParser());
-
-/* ---------- CORS ---------- */
-app.use(cors(corsOptions));
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
-
-/* ---------- Parsers ---------- */
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
-/* ---------- Root + favicon (prevent 404 noise) ---------- */
+/* ----------------------------------------
+   2) GLOBAL CORS (works for 200/404/500 + preflights)
+      Uses websiteConfig.frontends as the allow-list
+----------------------------------------- */
+function isAllowedOrigin(origin) {
+  try {
+    if (!origin) return false;
+    const list = Array.isArray(websiteConfig?.frontends)
+      ? websiteConfig.frontends
+      : [];
+    return list.includes(origin);
+  } catch {
+    return false;
+  }
+}
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (isAllowedOrigin(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Requested-With"
+    );
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    );
+  }
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+/* ----------------------------------------
+   3) Root + favicon (reduce noise)
+----------------------------------------- */
 app.get("/", (_req, res) => {
   res
     .type("text/plain")
@@ -45,7 +85,9 @@ app.get("/", (_req, res) => {
 });
 app.get("/favicon.ico", (_req, res) => res.sendStatus(204));
 
-/* ---------- Static (exports/uploads/temp) ---------- */
+/* ----------------------------------------
+   4) Static (read-only on Vercel; writable /tmp is handled by utils/paths)
+----------------------------------------- */
 app.use("/uploads", express.static(UPLOADS_DIR));
 app.use(
   "/temp",
@@ -62,20 +104,22 @@ app.use(
   })
 );
 
-// optional public next to API (local use)
+// Optional local public folder (harmless on Vercel)
 app.use(express.static(path.join(__dirname, "../public")));
 
-// images inside repo (read-only, fine on Vercel)
+// Images in repo (read-only)
 app.use("/assets/images", express.static(path.join(__dirname, "src", "assets", "images")));
 
-/* ---------- Open/Guarded API wall ---------- */
+/* ----------------------------------------
+   5) Open/guard wall for /api/*
+   (health + website + exports are open)
+----------------------------------------- */
 app.use("/api", (req, res, next) => {
   const p = (req.path || "").toLowerCase();
-
   const isOpen =
     p.startsWith("/auth") ||
-    p.startsWith("/website") ||      // /api/website/config, etc
-    p.startsWith("/health") ||       // /api/health
+    p.startsWith("/website") ||
+    p.startsWith("/health") ||
     p.startsWith("/withdrawals/exports") ||
     p.startsWith("/royalties/exports");
 
@@ -83,17 +127,22 @@ app.use("/api", (req, res, next) => {
   return verifyToken(req, res, next);
 });
 
-/* ✅ Hard-wire config endpoint so it can’t be shadowed */
-app.get("/api/website/config", (_req, res) =>
-  res.json({ success: true, config: websiteConfig })
-);
+/* ----------------------------------------
+   6) Guarantee /api/website/config (and non-/api fallback)
+----------------------------------------- */
+// Explicit handler so nothing can shadow it
+app.get("/api/website/config", (_req, res) => {
+  res.json({ success: true, config: websiteConfig });
+});
 
-/* ---------- Mount specific /api routers FIRST ---------- */
+// Router mounts
 app.use("/api/website", require("./routes/website"));
-app.use("/website", require("./routes/website")); // fallback non-/api path (same handler)
+app.use("/website", require("./routes/website")); // fallback for legacy calls
 
-/* ---------- Other API routes ---------- */
-app.use("/api", require("./routes/distribute")); // keep after specific mounts
+/* ----------------------------------------
+   7) Other API routes (order matters: keep after specific mounts)
+----------------------------------------- */
+app.use("/api", require("./routes/distribute"));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/user", require("./routes/user"));
@@ -106,31 +155,39 @@ app.use("/api/withdrawals", require("./routes/withdrawals"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/system", require("./routes/system"));
 
-/* ---------- Static exports (open) ---------- */
+/* ----------------------------------------
+   8) Static exports (open)
+----------------------------------------- */
 app.use("/api/withdrawals/exports", express.static(EXPORTS_DIR));
 app.use("/api/royalties/exports", express.static(ROYALTIES_DIR));
 
-/* ---------- Health (open) ---------- */
-app.get("/api/health", (_req, res) =>
-  res.json({ ok: true, uptime: process.uptime(), node: process.version })
-);
+/* ----------------------------------------
+   9) Health
+----------------------------------------- */
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, uptime: process.uptime(), node: process.version });
+});
 
-/* ---------- 404 / Error handlers ---------- */
+/* ----------------------------------------
+   10) 404 / Error handlers (leave CORS headers set already)
+----------------------------------------- */
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ success: false, message: "Not Found" });
   }
   return next();
 });
-app.use((err, req, res, next) => {
+
+app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);
-  if (res.headersSent) return next(err);
   res
     .status(err.status || 500)
     .json({ success: false, message: err.message || "Server Error" });
 });
 
-/* ---------- Local dev listener ---------- */
+/* ----------------------------------------
+   11) Local dev listener
+----------------------------------------- */
 if (!isVercel && process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 4000;
   app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
