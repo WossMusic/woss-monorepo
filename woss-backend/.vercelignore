@@ -1,0 +1,16 @@
+# large, ephemeral or static stuff — keep out of serverless bundle
+uploads/
+exports/
+temp/
+images/
+debug/
+public/
+
+# caches and misc
+node_modules/.cache/
+*.log
+*.map
+*.zip
+*.rar
+*.7z
+.DS_Store

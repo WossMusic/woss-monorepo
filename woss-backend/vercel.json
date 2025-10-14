@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs20.x",
+      "memory": 1024,
+      "maxDuration": 60,
+      "excludeFiles": "{uploads/**,exports/**,temp/**,images/**,public/**,debug/**,node_modules/.cache/**,**/*.map,**/*.log,**/*.zip,**/*.rar,**/*.7z}"
+    }
+  }
+}
