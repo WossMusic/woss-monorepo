@@ -16,8 +16,7 @@ function ForgotPassword() {
   // ---------- API base resolution (NO default localhost) ----------
   const envBase = String(process.env.REACT_APP_API_BASE || "").trim();
   const hookBase = String(config.domain || "").trim();
-  const API_BASE = (envBase || hookBase).replace(/\/+$/, ""); // may be ""
-
+  const API_BASE = (envBase || hookBase).replace(/\/+$/, "");
   const apiMissing = !API_BASE;
 
   const triggerErrorPopup = () => {
@@ -30,7 +29,7 @@ function ForgotPassword() {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if (apiMissing) {
-      console.error("ForgotPassword: API base is missing. Set REACT_APP_API_BASE or config.domain.");
+      console.error("API base is missing. Set REACT_APP_API_BASE or config.domain.");
       triggerErrorPopup();
       return;
     }
@@ -38,7 +37,7 @@ function ForgotPassword() {
       const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // credentials: "include", // uncomment only if your API uses cookies
+        // credentials: "include", // uncomment if your API uses cookies
         body: JSON.stringify({ email }),
       });
 
@@ -96,7 +95,8 @@ function ForgotPassword() {
             zIndex: 9998,
           }}
         >
-          API base not configured. Set <code>REACT_APP_API_BASE</code> or provide <code>config.domain</code>.
+          API base not configured. Set <code>REACT_APP_API_BASE</code> or provide{" "}
+          <code>config.domain</code>.
         </div>
       )}
 
