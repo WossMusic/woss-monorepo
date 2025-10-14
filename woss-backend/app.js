@@ -13,7 +13,7 @@ const {
   TEMP_DIR,
   EXPORTS_DIR,
   ROYALTIES_DIR,
-} = require("./paths");
+} = require("../utils/paths");
 
 const app = express();
 const isVercel = process.env.VERCEL === "1";
