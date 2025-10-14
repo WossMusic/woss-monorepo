@@ -6,6 +6,9 @@ function toInt(v, def) {
   return Number.isFinite(n) ? n : def;
 }
 
+const trim = (s) => String(s || "").trim();
+const stripTrailing = (s) => trim(s).replace(/\/+$/, "");
+
 /* ===================== Singleton Pool (Vercel-friendly) ===================== */
 let pool;
 function getPool() {
@@ -22,39 +25,71 @@ function getPool() {
       connectTimeout: toInt(process.env.DB_CONNECT_TIMEOUT_MS, 15000),
       enableKeepAlive: true,
       keepAliveInitialDelay: 0,
-      // Often required on hosted MySQLs; relax unless you load a CA
-      ssl: process.env.DB_SSL === "false" ? undefined : { rejectUnauthorized: false }
+      // Relax unless a CA bundle is provided
+      ssl: process.env.DB_SSL === "false" ? undefined : { rejectUnauthorized: false },
     });
   }
   return pool;
 }
 
-/* ===================== Site / API config ===================== */
-const DEFAULT_API_DOMAIN = process.env.API_DOMAIN || "http://localhost:4000";
+/* ===================== Site / Frontend allowlist ===================== */
 const allowedFrontends = String(process.env.ALLOWED_FRONTENDS || "")
-  .split(",").map(s => s.trim()).filter(Boolean);
+  .split(",")
+  .map((s) => trim(s))
+  .filter(Boolean);
+
 if (allowedFrontends.length === 0) {
-  allowedFrontends.push("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173");
+  // Safe locals for dev
+  allowedFrontends.push(
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173"
+  );
 }
 
+// site name only; domain will be resolved per-request in routes/website.js
 const websiteConfig = {
   name: process.env.SITE_NAME || "Woss Music",
-  domain: DEFAULT_API_DOMAIN.replace(/\/$/, ""),
+  domain: "", // filled dynamically in /api/website/config
   frontends: allowedFrontends,
-  frontendOrigin:
-    (process.env.FRONTEND_ORIGIN && process.env.FRONTEND_ORIGIN.replace(/\/$/, "")) ||
-    allowedFrontends[0],
 };
 
-/* ===================== Shared CORS options ===================== */
+/* ===================== CORS (exact match + wildcard support) ===================== */
+/**
+ * Wildcard matching: allow entries like *.vercel.app
+ */
+function isAllowedOrigin(origin, allowlist) {
+  if (!origin) return true; // server-to-server / same-origin
+  try {
+    const url = new URL(origin);
+    const host = url.host; // e.g. frontend-woss.vercel.app
+    const full = `${url.protocol}//${url.host}`;
+
+    return allowlist.some((entry) => {
+      // exact
+      if (entry === full) return true;
+
+      // wildcard like *.vercel.app (matches sub.example)
+      if (entry.startsWith("*.")) {
+        const suffix = entry.slice(1); // ".vercel.app"
+        return host.endsWith(suffix);
+      }
+      return false;
+    });
+  } catch {
+    return false;
+  }
+}
+
 const corsOptions = {
-  origin: (origin, cb) => {
-    if (!origin || websiteConfig.frontends.includes(origin)) return cb(null, true);
-    return cb(new Error(`CORS not allowed: ${origin}`));
+  origin(origin, cb) {
+    if (isAllowedOrigin(origin, allowedFrontends)) return cb(null, true);
+    return cb(new Error(`Not allowed by CORS: ${origin || "<no-origin>"}`));
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  optionsSuccessStatus: 204,
 };
 
 /* ===================== Exports ===================== */
