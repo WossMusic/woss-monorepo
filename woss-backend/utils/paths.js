@@ -2,7 +2,7 @@
 const path = require("path");
 const fs = require("fs");
 
-// Writable root: /tmp on Vercel, repo folder locally (or override with UPLOAD_DIR)
+// Writable root: /tmp on Vercel, repo folder locally (override with UPLOAD_DIR)
 const WRITABLE_ROOT =
   process.env.UPLOAD_DIR || (process.env.VERCEL ? "/tmp" : path.join(__dirname, ".."));
 
