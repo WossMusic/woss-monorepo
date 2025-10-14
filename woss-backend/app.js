@@ -1,5 +1,4 @@
 require("dotenv").config();
-const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
@@ -7,14 +6,18 @@ const cookieParser = require("cookie-parser");
 const { corsOptions, execute } = require("./config/db");
 const verifyToken = require("./middleware/verifyToken");
 
+const {
+  ensureDirs,
+  UPLOADS_DIR,
+  TEMP_DIR,
+  EXPORTS_DIR,
+  ROYALTIES_DIR,
+} = require("./utils/paths");
+
 const app = express();
 
-/* ---------- Local folders (only useful locally / non-serverless) ---------- */
-["uploads", "temp", "exports", path.join("exports", "royalties")]
-  .map((p) => path.join(__dirname, p))
-  .forEach((p) => {
-    try { fs.mkdirSync(p, { recursive: true }); } catch (_) {}
-  });
+/* ---------- Ensure writable dirs (uses /tmp on Vercel) ---------- */
+ensureDirs();
 
 /* ---------- Basic hardening ---------- */
 app.set("trust proxy", 1);
@@ -29,9 +32,10 @@ app.use((req, res, next) => { if (req.method === "OPTIONS") return res.sendStatu
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
-/* ---------- Static (⚠️ read-only on Vercel) ---------- */
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use("/temp", express.static(path.join(__dirname, "temp"), {
+/* ---------- Static ---------- */
+/* Writable, ephemeral on Vercel */
+app.use("/uploads", express.static(UPLOADS_DIR));
+app.use("/temp", express.static(TEMP_DIR, {
   maxAge: "1d",
   setHeaders: (res, filePath) => {
     if (filePath.endsWith(".zip") || filePath.endsWith(".xlsx")) {
@@ -39,6 +43,8 @@ app.use("/temp", express.static(path.join(__dirname, "temp"), {
     }
   },
 }));
+
+/* Read-only assets served from the repo are OK */
 app.use(express.static(path.join(__dirname, "../public")));
 app.use("/assets/images", express.static(path.join(__dirname, "src", "assets", "images")));
 
@@ -69,9 +75,9 @@ app.use("/api/withdrawals", require("./routes/withdrawals"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/system", require("./routes/system"));
 
-/* static exports (open) — ⚠️ move to Blob/SAS for Vercel persistence */
-app.use("/api/withdrawals/exports", express.static(path.join(__dirname, "exports")));
-app.use("/api/royalties/exports", express.static(path.join(__dirname, "exports", "royalties")));
+/* Static exports (open) — ephemeral on Vercel */
+app.use("/api/withdrawals/exports", express.static(EXPORTS_DIR));
+app.use("/api/royalties/exports", express.static(ROYALTIES_DIR));
 
 /* ---------- Health ---------- */
 app.get("/api/health", (req, res) =>
@@ -95,10 +101,8 @@ async function runAutoDistribute() {
   return result?.affectedRows || 0;
 }
 
-/* Endpoint to trigger from Cron (guard with simple token if you like) */
 app.post("/api/system/auto-distribute", async (req, res, next) => {
   try {
-    // Simple shared secret (optional)
     const secret = process.env.CRON_SECRET;
     if (secret && req.headers["x-cron-secret"] !== secret) {
       return res.status(401).json({ ok: false, message: "unauthorized" });

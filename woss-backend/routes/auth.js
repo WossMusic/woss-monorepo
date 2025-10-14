@@ -9,19 +9,22 @@ const crypto = require("crypto");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const { UPLOADS_DIR, ensureDirs } = require("../utils/paths");
 
 /* -------------------- uploads -------------------- */
-const uploadDir = path.join(__dirname, "../uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+ensureDirs();
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
+  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname || "").toLowerCase();
     cb(null, `${Date.now()}-${file.fieldname}${ext}`);
   },
 });
-const fileFilter = (_req, file, cb) => cb(null, /image\/(jpeg|png)/.test(file.mimetype || ""));
+
+const fileFilter = (_req, file, cb) =>
+  cb(null, /image\/(jpeg|png)/.test(file.mimetype || ""));
+
 const upload = multer({ storage, fileFilter });
 
 /* -------------------- auth middleware -------------------- */
