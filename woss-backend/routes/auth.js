@@ -8,12 +8,10 @@ const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 const { UPLOADS_DIR, ensureDirs } = require("../utils/paths");
-
-/* -------------------- uploads -------------------- */
 ensureDirs();
 
+/* -------------------- uploads -------------------- */
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
   filename: (_req, file, cb) => {
@@ -21,10 +19,8 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}-${file.fieldname}${ext}`);
   },
 });
-
 const fileFilter = (_req, file, cb) =>
   cb(null, /image\/(jpeg|png)/.test(file.mimetype || ""));
-
 const upload = multer({ storage, fileFilter });
 
 /* -------------------- auth middleware -------------------- */

@@ -1,11 +1,12 @@
 require("dotenv").config();
+
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+
 const { corsOptions, execute } = require("./config/db");
 const verifyToken = require("./middleware/verifyToken");
-
 const {
   ensureDirs,
   UPLOADS_DIR,
@@ -16,7 +17,7 @@ const {
 
 const app = express();
 
-/* ---------- Ensure writable dirs (uses /tmp on Vercel) ---------- */
+/* ---------- Prepare writable folders (works on Vercel: /tmp) ---------- */
 ensureDirs();
 
 /* ---------- Basic hardening ---------- */
@@ -26,25 +27,34 @@ app.use(cookieParser());
 
 /* ---------- CORS ---------- */
 app.use(cors(corsOptions));
-app.use((req, res, next) => { if (req.method === "OPTIONS") return res.sendStatus(204); next(); });
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 
 /* ---------- Parsers ---------- */
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
-/* ---------- Static ---------- */
-/* Writable, ephemeral on Vercel */
+/* ---------- Static (read-only bundle is OK for *serving*, not writing) ---------- */
+// These now point to writable dirs (local project in dev, /tmp on Vercel)
 app.use("/uploads", express.static(UPLOADS_DIR));
-app.use("/temp", express.static(TEMP_DIR, {
-  maxAge: "1d",
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith(".zip") || filePath.endsWith(".xlsx")) {
-      res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filePath)}"`);
-    }
-  },
-}));
+app.use(
+  "/temp",
+  express.static(TEMP_DIR, {
+    maxAge: "1d",
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(".zip") || filePath.endsWith(".xlsx")) {
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${path.basename(filePath)}"`
+        );
+      }
+    },
+  })
+);
 
-/* Read-only assets served from the repo are OK */
+// Optional: serve any public assets baked into the repo (read-only is fine)
 app.use(express.static(path.join(__dirname, "../public")));
 app.use("/assets/images", express.static(path.join(__dirname, "src", "assets", "images")));
 
@@ -75,7 +85,7 @@ app.use("/api/withdrawals", require("./routes/withdrawals"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/system", require("./routes/system"));
 
-/* Static exports (open) — ephemeral on Vercel */
+/* ---------- Static exports (served from writable dirs) ---------- */
 app.use("/api/withdrawals/exports", express.static(EXPORTS_DIR));
 app.use("/api/royalties/exports", express.static(ROYALTIES_DIR));
 
@@ -109,22 +119,32 @@ app.post("/api/system/auto-distribute", async (req, res, next) => {
     }
     const updated = await runAutoDistribute();
     res.json({ ok: true, updated });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 /* ---------- 404 / Error handlers ---------- */
 app.use((req, res, next) => {
-  if (req.path.startsWith("/api/")) return res.status(404).json({ success: false, message: "Not Found" });
+  if (req.path.startsWith("/api/"))
+    return res.status(404).json({ success: false, message: "Not Found" });
   return next();
 });
-app.use((err, req, res, next) => {
+
+app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);
-  if (res.headersSent) return next(err);
-  res.status(err.status || 500).json({ success: false, message: err.message || "Server Error" });
+  if (!res.headersSent) {
+    res.status(err.status || 500).json({
+      success: false,
+      message: err.message || "Server Error",
+    });
+  }
 });
 
+/* ---------- Local dev ---------- */
 if (process.env.VERCEL !== "1" && process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 4000;
   app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
 }
+
 module.exports = app;
