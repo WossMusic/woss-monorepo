@@ -9,7 +9,7 @@ const verifyToken = require("./middleware/verifyToken");
 
 const app = express();
 
-/* ---------- Ensure local folders exist (first boot safety) ---------- */
+/* ---------- Local folders (only useful locally / non-serverless) ---------- */
 ["uploads", "temp", "exports", path.join("exports", "royalties")]
   .map((p) => path.join(__dirname, p))
   .forEach((p) => {
@@ -23,31 +23,22 @@ app.use(cookieParser());
 
 /* ---------- CORS ---------- */
 app.use(cors(corsOptions));
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
+app.use((req, res, next) => { if (req.method === "OPTIONS") return res.sendStatus(204); next(); });
 
 /* ---------- Parsers ---------- */
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
-/* ---------- Static (public) ---------- */
+/* ---------- Static (⚠️ read-only on Vercel) ---------- */
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use(
-  "/temp",
-  express.static(path.join(__dirname, "temp"), {
-    maxAge: "1d",
-    setHeaders: (res, filePath) => {
-      if (filePath.endsWith(".zip") || filePath.endsWith(".xlsx")) {
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename="${path.basename(filePath)}"`
-        );
-      }
-    },
-  })
-);
+app.use("/temp", express.static(path.join(__dirname, "temp"), {
+  maxAge: "1d",
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".zip") || filePath.endsWith(".xlsx")) {
+      res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filePath)}"`);
+    }
+  },
+}));
 app.use(express.static(path.join(__dirname, "../public")));
 app.use("/assets/images", express.static(path.join(__dirname, "src", "assets", "images")));
 
@@ -78,7 +69,7 @@ app.use("/api/withdrawals", require("./routes/withdrawals"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/system", require("./routes/system"));
 
-/* static exports (open) */
+/* static exports (open) — ⚠️ move to Blob/SAS for Vercel persistence */
 app.use("/api/withdrawals/exports", express.static(path.join(__dirname, "exports")));
 app.use("/api/royalties/exports", express.static(path.join(__dirname, "exports", "royalties")));
 
@@ -87,39 +78,39 @@ app.get("/api/health", (req, res) =>
   res.json({ ok: true, uptime: process.uptime(), node: process.version })
 );
 
-/* ---------- Auto-distribute scheduler ---------- */
-function startAutoDistribute() {
-  const run = async () => {
-    try {
-      const [result] = await execute(
-        `UPDATE releases
-            SET status = 'Distributed',
-                distributed_at = IFNULL(distributed_at, NOW())
-          WHERE UPPER(TRIM(status)) = 'APPROVED'
-            AND (
-                  (product_release_date IS NOT NULL
-                   AND TIMESTAMP(product_release_date, '00:00:00') <= NOW())
-               OR (approved_at IS NOT NULL
-                   AND approved_at <= NOW())
-                )`
-      );
-      if (result?.affectedRows) {
-        console.log(`[auto-distribute] updated ${result.affectedRows} release(s).`);
-      }
-    } catch (err) {
-      console.error("[auto-distribute] error:", err);
-    }
-  };
-  setTimeout(run, 10 * 1000);
-  setInterval(run, 60 * 1000);
+/* ---------- Auto-distribute: on-demand (use Vercel Cron) ---------- */
+async function runAutoDistribute() {
+  const [result] = await execute(
+    `UPDATE releases
+       SET status = 'Distributed',
+           distributed_at = IFNULL(distributed_at, NOW())
+     WHERE UPPER(TRIM(status)) = 'APPROVED'
+       AND (
+             (product_release_date IS NOT NULL
+              AND TIMESTAMP(product_release_date, '00:00:00') <= NOW())
+          OR (approved_at IS NOT NULL
+              AND approved_at <= NOW())
+           )`
+  );
+  return result?.affectedRows || 0;
 }
-startAutoDistribute();
+
+/* Endpoint to trigger from Cron (guard with simple token if you like) */
+app.post("/api/system/auto-distribute", async (req, res, next) => {
+  try {
+    // Simple shared secret (optional)
+    const secret = process.env.CRON_SECRET;
+    if (secret && req.headers["x-cron-secret"] !== secret) {
+      return res.status(401).json({ ok: false, message: "unauthorized" });
+    }
+    const updated = await runAutoDistribute();
+    res.json({ ok: true, updated });
+  } catch (err) { next(err); }
+});
 
 /* ---------- 404 / Error handlers ---------- */
 app.use((req, res, next) => {
-  if (req.path.startsWith("/api/")) {
-    return res.status(404).json({ success: false, message: "Not Found" });
-  }
+  if (req.path.startsWith("/api/")) return res.status(404).json({ success: false, message: "Not Found" });
   return next();
 });
 app.use((err, req, res, next) => {
