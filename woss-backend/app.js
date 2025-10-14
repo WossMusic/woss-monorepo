@@ -41,7 +41,7 @@ app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 app.get("/", (_req, res) => {
   res
     .type("text/plain")
-    .send("Woss API • OK\nTry: /api/health  /api/website/config");
+    .send("Woss API • OK\nTry: /api/health  /api/website/config  /website/config");
 });
 app.get("/favicon.ico", (_req, res) => res.sendStatus(204));
 
@@ -85,6 +85,7 @@ app.use("/api", require("./routes/distribute"));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/website", require("./routes/website"));
+app.use("/website", require("./routes/website")); // fallback path (non-/api)
 app.use("/api/user", require("./routes/user"));
 app.use("/api/royalties", require("./routes/royalties"));
 app.use("/api/splits", require("./routes/splits"));
@@ -100,7 +101,7 @@ app.use("/api/withdrawals/exports", express.static(EXPORTS_DIR));
 app.use("/api/royalties/exports", express.static(ROYALTIES_DIR));
 
 /* ---------- Health ---------- */
-app.get("/api/health", (req, res) =>
+app.get("/api/health", (_req, res) =>
   res.json({ ok: true, uptime: process.uptime(), node: process.version })
 );
 
