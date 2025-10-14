@@ -1,13 +1,7 @@
+// web/src/views/auth/ForgotPassword.js
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Button,
-  Card,
-  CardBody,
-  FormGroup,
-  Form,
-  Input,
-} from "reactstrap";
+import { Button, Card, CardBody, FormGroup, Form, Input } from "reactstrap";
 import useWebsiteConfig from "hooks/useWebsiteConfig";
 
 function ForgotPassword() {
@@ -19,6 +13,13 @@ function ForgotPassword() {
 
   if (!config) return <p>Loading...</p>;
 
+  // ---------- API base resolution (NO default localhost) ----------
+  const envBase = String(process.env.REACT_APP_API_BASE || "").trim();
+  const hookBase = String(config.domain || "").trim();
+  const API_BASE = (envBase || hookBase).replace(/\/+$/, ""); // may be ""
+
+  const apiMissing = !API_BASE;
+
   const triggerErrorPopup = () => {
     setFadeOut(false);
     setShowError(true);
@@ -28,16 +29,22 @@ function ForgotPassword() {
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
+    if (apiMissing) {
+      console.error("ForgotPassword: API base is missing. Set REACT_APP_API_BASE or config.domain.");
+      triggerErrorPopup();
+      return;
+    }
     try {
-      const res = await fetch(`${config.domain}/api/auth/forgot-password`, {
+      const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // credentials: "include", // uncomment only if your API uses cookies
         body: JSON.stringify({ email }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (res.ok && data.success) {
+      if (res.ok && data?.success) {
         navigate("/auth/email-sent");
       } else {
         triggerErrorPopup();
@@ -73,6 +80,26 @@ function ForgotPassword() {
         </div>
       )}
 
+      {/* Warn if API is missing */}
+      {apiMissing && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            padding: "10px 16px",
+            background: "#ffd166",
+            color: "#1a1a1a",
+            fontWeight: 600,
+            textAlign: "center",
+            zIndex: 9998,
+          }}
+        >
+          API base not configured. Set <code>REACT_APP_API_BASE</code> or provide <code>config.domain</code>.
+        </div>
+      )}
+
       <div
         style={{
           minHeight: "100vh",
@@ -82,6 +109,7 @@ function ForgotPassword() {
           justifyContent: "center",
           alignItems: "center",
           flexDirection: "column",
+          paddingTop: apiMissing ? 40 : 0,
         }}
       >
         <div className="text-center mb-4">
@@ -120,7 +148,7 @@ function ForgotPassword() {
                 />
               </FormGroup>
 
-              <Button color="darker" block type="submit">
+              <Button color="darker" block type="submit" disabled={apiMissing}>
                 Next
               </Button>
             </Form>
