@@ -37,6 +37,14 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
+/* ---------- Root + favicon (prevent 404 noise) ---------- */
+app.get("/", (_req, res) => {
+  res
+    .type("text/plain")
+    .send("Woss API • OK\nTry: /api/health  /api/website/config");
+});
+app.get("/favicon.ico", (_req, res) => res.sendStatus(204));
+
 /* ---------- Static (exports/uploads/temp) ---------- */
 app.use("/uploads", express.static(UPLOADS_DIR));
 app.use(
@@ -116,4 +124,5 @@ if (!isVercel && process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 4000;
   app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
 }
+
 module.exports = app;
