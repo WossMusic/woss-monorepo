@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 const { hash, compare } = require("bcryptjs");
 const { sign, verify } = require("jsonwebtoken");
-const { execute, websiteConfig } = require("../config/db");
+const { execute, websiteConfig, getPool } = require("../config/db"); // <-- getPool added
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const multer = require("multer");
@@ -56,34 +56,30 @@ function maskPhone(phone) {
 }
 
 /* -------------------- SMS whitelist & sender -------------------- */
-// Comma-separated list of numbers that should have "unlimited" sends
 const UNLIMITED_SET = new Set(
   (process.env.UNLIMITED_SMS_PHONES || "")
     .split(",")
-    .map(p => normalizePhone(p))
+    .map((p) => normalizePhone(p))
     .filter(Boolean)
 );
 
-// If true, for whitelisted phones we DO NOT call Twilio; we log OTP instead.
 const DEV_SMS_BYPASS = String(process.env.DEV_SMS_BYPASS || "").toLowerCase() === "true";
 
-// Rotate copy to reduce carrier filtering
 const OTP_TEMPLATES = [
-  (code)=>`Woss Music code: ${code}. Expires in 10 minutes.`,
-  (code)=>`Your Woss code is ${code}. It expires in 10 minutes.`,
-  (code)=>`${code} is your Woss verification code (valid 10 min).`,
-  (code)=>`Use code ${code} to verify your Woss account (10 min).`
+  (code) => `Woss Music code: ${code}. Expires in 10 minutes.`,
+  (code) => `Your Woss code is ${code}. It expires in 10 minutes.`,
+  (code) => `${code} is your Woss verification code (valid 10 min).`,
+  (code) => `Use code ${code} to verify your Woss account (10 min).`,
 ];
 function otpBody(code) {
-  return OTP_TEMPLATES[Math.floor(Math.random()*OTP_TEMPLATES.length)](code);
+  return OTP_TEMPLATES[Math.floor(Math.random() * OTP_TEMPLATES.length)](code);
 }
 
-// Minimal Twilio send (Messaging Service SID preferred; else From)
 async function sendSmsTwilioRaw(to, body) {
-  const sid  = process.env.TWILIO_ACCOUNT_SID;
+  const sid = process.env.TWILIO_ACCOUNT_SID;
   const auth = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_FROM || process.env.TWILIO_PHONE_NUMBER || "";
-  const svc  = process.env.TWILIO_MESSAGING_SERVICE_SID || "";
+  const svc = process.env.TWILIO_MESSAGING_SERVICE_SID || "";
 
   if (!sid || !auth || (!svc && !from)) {
     console.warn("[SMS] Twilio env missing; would send:", body, "->", to);
@@ -100,23 +96,80 @@ async function sendSmsTwilioRaw(to, body) {
     "Content-Type": "application/x-www-form-urlencoded",
   };
   const params = new URLSearchParams({ To: to, Body: body });
-  if (svc) params.set("MessagingServiceSid", svc); else params.set("From", from);
+  if (svc) params.set("MessagingServiceSid", svc);
+  else params.set("From", from);
 
   const resp = await doFetch(url, { method: "POST", headers, body: params.toString() });
-  const json = await resp.json().catch(()=>({}));
+  const json = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     console.error("[SMS] Twilio ERROR", resp.status, json.code, json.message, "=>", to);
-    return { ok:false, status:resp.status, code:json.code, message:json.message };
+    return { ok: false, status: resp.status, code: json.code, message: json.message };
   }
   console.log("[SMS] Twilio OK:", json.sid, json.status, "->", to);
-  return { ok:true, sid:json.sid, status:json.status };
+  return { ok: true, sid: json.sid, status: json.status };
 }
+
+/* -------------------------------------------
+   Friendly method guards / info responses
+-------------------------------------------- */
+function onlyPost(path) {
+  router.all(path, (req, res, next) => {
+    if (req.method !== "POST") {
+      const hint = `${req.baseUrl}${path}`;
+      return res.status(405).json({
+        success: false,
+        message: `Method not allowed. Use POST ${hint}`,
+      });
+    }
+    next();
+  });
+}
+
+[
+  "/login",
+  "/login/request-otp",
+  "/login/verify-otp",
+  "/request-otp",
+  "/verify-otp",
+  "/forgot-password",
+  "/reset-password",
+  "/validate-code",
+  "/mfa/email/request",
+  "/mfa/email/verify",
+  "/mfa/reset",
+  "/mfa/reset/request-sms",
+  "/mfa/reset/verify-current",
+  "/mfa/reset/request-new-sms",
+  "/mfa/reset/verify-new",
+  "/password/change",
+].forEach(onlyPost);
+
+// Simple GET index
+router.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    routes: {
+      login: "POST /api/auth/login  { email, password, mfa_trust_token? }",
+      login_request_otp: "POST /api/auth/login/request-otp  { email }",
+      login_verify_otp: "POST /api/auth/login/verify-otp  { email, code, remember }",
+      forgot_password: "POST /api/auth/forgot-password  { email }",
+      reset_password: "POST /api/auth/reset-password  { token, newPassword }",
+    },
+  });
+});
+
+// GET /api/auth/login -> hint
+router.get("/login", (_req, res) => {
+  return res.status(405).json({
+    success: false,
+    message: "This endpoint requires POST with JSON body: { email, password, mfa_trust_token? }",
+    example: "POST /api/auth/login",
+  });
+});
 
 /* =======================================================================
    REGISTRATION MFA (send + verify)
 ======================================================================= */
-
-// Send OTP to phone from registration form
 router.post("/request-otp", async (req, res) => {
   try {
     const phone = normalizePhone(req.body.phone);
@@ -125,7 +178,6 @@ router.post("/request-otp", async (req, res) => {
     }
 
     const isUnlimited = UNLIMITED_SET.has(phone);
-
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const codeHash = sha256(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -143,7 +195,7 @@ router.post("/request-otp", async (req, res) => {
 
     const body = otpBody(code);
     const sent = await sendSmsTwilioRaw(phone, body);
-    if (!sent.ok) return res.status(502).json({ success:false, message: sent.message || "SMS send failed" });
+    if (!sent.ok) return res.status(502).json({ success: false, message: sent.message || "SMS send failed" });
 
     return res.json({ success: true, cooldown: isUnlimited ? 0 : 30 });
   } catch (e) {
@@ -152,7 +204,6 @@ router.post("/request-otp", async (req, res) => {
   }
 });
 
-// Verify registration OTP -> return mfa_token for /register
 router.post("/verify-otp", async (req, res) => {
   try {
     const phone = normalizePhone(req.body.phone);
@@ -214,7 +265,8 @@ router.post(
     const emailLower = String(email || "").trim().toLowerCase();
     const phoneNorm = normalizePhone(phone);
 
-    const connection = await require("../config/db").pool.getConnection();
+    // IMPORTANT: use getPool(), not a non-exported pool
+    const connection = await getPool().getConnection();
 
     try {
       await connection.beginTransaction();
@@ -336,7 +388,7 @@ router.post("/account-status", async (req, res) => {
       success: true,
       found: true,
       account_status: rows[0].account_status,
-      project_name: rows[0].project_name || ""
+      project_name: rows[0].project_name || "",
     });
   } catch (e) {
     console.error("account-status error:", e);
@@ -347,39 +399,36 @@ router.post("/account-status", async (req, res) => {
 /* =======================================================================
    LOGIN + 30-day trust (Remember for 30 days)
 ======================================================================= */
-// LOGIN (password → optional MFA depending on env / trust token)
 router.post("/login", async (req, res) => {
   const emailLower = String(req.body.email || "").trim().toLowerCase();
   const { password, mfa_trust_token } = req.body;
 
   const envFlag = String(process.env.LOGIN_MFA || "").toLowerCase();
-  const isProd  = String(process.env.NODE_ENV || "development") === "production";
+  const isProd = String(process.env.NODE_ENV || "development") === "production";
   const MFA_REQUIRED = envFlag ? envFlag !== "off" : isProd; // prod => true, dev => false
 
   try {
     const [users] = await execute("SELECT * FROM users WHERE email = ?", [emailLower]);
     if (!users.length) {
-      return res.status(400).json({ success:false, error: "Email not found." });
+      return res.status(400).json({ success: false, error: "Email not found." });
     }
 
     const user = users[0];
 
-    // Guard: missing/invalid hash should NOT throw
-    const hash = user.password || "";
-    if (!hash || typeof hash !== "string" || !hash.startsWith("$2")) {
+    // Guard invalid/missing hash
+    const pwHash = user.password || "";
+    if (!pwHash || typeof pwHash !== "string" || !pwHash.startsWith("$2")) {
       return res.status(400).json({
         success: false,
-        error: "Password not set for this account. Please reset your password."
+        error: "Password not set for this account. Please reset your password.",
       });
     }
 
-    // Password check (returns false on mismatch; no throws)
-    const match = await compare(password, hash);
+    const match = await compare(password, pwHash);
     if (!match) {
-      return res.status(401).json({ success:false, error: "Incorrect password." });
+      return res.status(401).json({ success: false, error: "Incorrect password." });
     }
 
-    // Account status gate
     if (user.account_status && user.account_status !== "Active") {
       return res.status(403).json({
         pending: true,
@@ -389,7 +438,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Trust token (30-day) shortcut
+    // Trust token shortcut
     if (mfa_trust_token) {
       const [trust] = await execute(
         "SELECT id FROM mfa_trusts WHERE user_id=? AND token_hash=? AND expires_at>NOW()",
@@ -397,7 +446,7 @@ router.post("/login", async (req, res) => {
       );
       if (trust.length) {
         if (!process.env.JWT_SECRET) {
-          return res.status(500).json({ success:false, error:"JWT secret missing on server." });
+          return res.status(500).json({ success: false, error: "JWT secret missing on server." });
         }
         const token = sign(
           { userId: user.id, email: user.email, role: user.role },
@@ -417,12 +466,11 @@ router.post("/login", async (req, res) => {
       }
     }
 
-    // Decide whether to enforce MFA now
     const hasPhone = !!String(user.phone || "").trim();
 
     if (!MFA_REQUIRED) {
       if (!process.env.JWT_SECRET) {
-        return res.status(500).json({ success:false, error:"JWT secret missing on server." });
+        return res.status(500).json({ success: false, error: "JWT secret missing on server." });
       }
       const token = sign(
         { userId: user.id, email: user.email, role: user.role },
@@ -442,7 +490,6 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // MFA required (production or forced on)
     if (!hasPhone) {
       return res.status(403).json({
         mfa_required: true,
@@ -452,7 +499,6 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Require OTP on the client
     return res.status(403).json({
       mfa_required: true,
       email: emailLower,
@@ -460,13 +506,11 @@ router.post("/login", async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
-    return res.status(500).json({ success:false, error: "Login failed." });
+    return res.status(500).json({ success: false, error: "Login failed." });
   }
 });
 
-
-
-// Login: send OTP by resolving phone from email
+/* Login: request OTP */
 router.post("/login/request-otp", async (req, res) => {
   try {
     const emailLower = String(req.body.email || "").trim().toLowerCase();
@@ -482,7 +526,6 @@ router.post("/login/request-otp", async (req, res) => {
     if (!phone) return res.status(400).json({ success: false, message: "User has no phone on file" });
 
     const isUnlimited = UNLIMITED_SET.has(phone);
-
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const codeHash = sha256(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -509,7 +552,7 @@ router.post("/login/request-otp", async (req, res) => {
   }
 });
 
-// Login: verify OTP and optionally issue 30-day trust token
+/* Login: verify OTP */
 router.post("/login/verify-otp", async (req, res) => {
   try {
     const emailLower = String(req.body.email || "").trim().toLowerCase();
@@ -545,6 +588,9 @@ router.post("/login/verify-otp", async (req, res) => {
 
     await execute("DELETE FROM phone_otps WHERE phone = ?", [phone]);
 
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ success: false, message: "JWT secret missing on server." });
+    }
     const token = sign(
       { userId: u.id, email: u.email, role: u.role },
       process.env.JWT_SECRET,
@@ -565,7 +611,7 @@ router.post("/login/verify-otp", async (req, res) => {
       success: true,
       token,
       user: { id: u.id, fullName: u.full_name, role: u.role, account_status: u.account_status },
-      mfa_trust_token: trustToken
+      mfa_trust_token: trustToken,
     });
   } catch (e) {
     console.error("login/verify-otp error:", e);
@@ -700,11 +746,14 @@ router.post("/mfa/email/request", authenticateToken, async (req, res) => {
     const codeHash = sha256(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    await execute(`
+    await execute(
+      `
       INSERT INTO email_otps (user_id, code_hash, expires_at, attempts)
       VALUES (?, ?, ?, 0)
       ON DUPLICATE KEY UPDATE code_hash=VALUES(code_hash), expires_at=VALUES(expires_at), attempts=0
-    `, [userId, codeHash, expiresAt]);
+    `,
+      [userId, codeHash, expiresAt]
+    );
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -754,10 +803,11 @@ router.post("/mfa/email/verify", authenticateToken, async (req, res) => {
 
     const emailToken = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    await execute(
-      "INSERT INTO email_mfa_sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
-      [emailToken, userId, expiresAt]
-    );
+    await execute("INSERT INTO email_mfa_sessions (token, user_id, expires_at) VALUES (?, ?, ?)", [
+      emailToken,
+      userId,
+      expiresAt,
+    ]);
 
     await execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
 
@@ -791,19 +841,17 @@ router.post("/mfa/reset", authenticateToken, async (req, res) => {
     if (!userRows.length) return res.status(404).json({ success: false, message: "User not found" });
     const currentPhone = normalizePhoneInner(userRows[0].phone);
 
-    const [oldRows] = await execute(
-      "SELECT * FROM mfa_sessions WHERE token = ? AND expires_at > NOW()",
-      [old_phone_token]
-    );
+    const [oldRows] = await execute("SELECT * FROM mfa_sessions WHERE token = ? AND expires_at > NOW()", [
+      old_phone_token,
+    ]);
     if (!oldRows.length || normalizePhoneInner(oldRows[0].phone) !== currentPhone) {
       return res.status(400).json({ success: false, message: "Old phone token invalid" });
     }
 
     const newPhoneE164 = normalizePhoneInner(new_phone);
-    const [newRows] = await execute(
-      "SELECT * FROM mfa_sessions WHERE token = ? AND expires_at > NOW()",
-      [new_phone_token]
-    );
+    const [newRows] = await execute("SELECT * FROM mfa_sessions WHERE token = ? AND expires_at > NOW()", [
+      new_phone_token,
+    ]);
     if (!newRows.length || normalizePhoneInner(newRows[0].phone) !== newPhoneE164) {
       return res.status(400).json({ success: false, message: "New phone token invalid" });
     }
@@ -821,23 +869,22 @@ router.post("/mfa/reset", authenticateToken, async (req, res) => {
 });
 
 /* =======================================================================
-   MFA RESET — CURRENT PHONE: send code (whitelist + optional bypass)
+   MFA RESET — CURRENT PHONE
 ======================================================================= */
 router.post("/mfa/reset/request-sms", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const [uRows] = await execute("SELECT phone FROM users WHERE id=?", [userId]);
     if (!uRows.length || !uRows[0].phone) {
-      return res.status(400).json({ success:false, message:"No phone on file." });
+      return res.status(400).json({ success: false, message: "No phone on file." });
     }
 
     const phone = normalizePhone(uRows[0].phone);
     if (!phone || !phone.startsWith("+")) {
-      return res.status(400).json({ success:false, message:"Phone must be E.164 (e.g. +18095138195)." });
+      return res.status(400).json({ success: false, message: "Phone must be E.164 (e.g. +18095138195)." });
     }
 
     const isUnlimited = UNLIMITED_SET.has(phone);
-
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const codeHash = sha256(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -850,23 +897,20 @@ router.post("/mfa/reset/request-sms", authenticateToken, async (req, res) => {
 
     if (DEV_SMS_BYPASS && isUnlimited) {
       console.warn(`[DEV SMS BYPASS] OTP for ${phone}: ${code}`);
-      return res.json({ success:true, cooldown:0, phone_hint: maskPhone(phone), dev:true });
+      return res.json({ success: true, cooldown: 0, phone_hint: maskPhone(phone), dev: true });
     }
 
     const body = otpBody(code);
     const sent = await sendSmsTwilioRaw(phone, body);
-    if (!sent.ok) return res.status(502).json({ success:false, message: sent.message || "SMS send failed" });
+    if (!sent.ok) return res.status(502).json({ success: false, message: sent.message || "SMS send failed" });
 
-    return res.json({ success:true, cooldown: isUnlimited ? 0 : 30, phone_hint: maskPhone(phone) });
+    return res.json({ success: true, cooldown: isUnlimited ? 0 : 30, phone_hint: maskPhone(phone) });
   } catch (e) {
     console.error("mfa/reset/request-sms error:", e);
-    return res.status(500).json({ success:false, message:"Could not send code." });
+    return res.status(500).json({ success: false, message: "Could not send code." });
   }
 });
 
-/* =======================================================================
-   MFA RESET — CURRENT PHONE: verify -> returns old_phone_token
-======================================================================= */
 router.post("/mfa/reset/verify-current", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -874,40 +918,37 @@ router.post("/mfa/reset/verify-current", authenticateToken, async (req, res) => 
 
     const [uRows] = await execute("SELECT phone FROM users WHERE id=?", [userId]);
     if (!uRows.length || !uRows[0].phone) {
-      return res.status(400).json({ success:false, message:"No phone on file." });
+      return res.status(400).json({ success: false, message: "No phone on file." });
     }
     const phone = normalizePhone(uRows[0].phone);
 
-    const [rows] = await execute(
-      "SELECT * FROM phone_otps WHERE phone=? ORDER BY expires_at DESC LIMIT 1",
-      [phone]
-    );
-    if (!rows.length) return res.status(400).json({ success:false, message:"Code not found" });
+    const [rows] = await execute("SELECT * FROM phone_otps WHERE phone=? ORDER BY expires_at DESC LIMIT 1", [phone]);
+    if (!rows.length) return res.status(400).json({ success: false, message: "Code not found" });
 
     const row = rows[0];
-    if (new Date(row.expires_at) < new Date()) return res.status(400).json({ success:false, message:"Code expired" });
-    if (row.attempts >= 5) return res.status(400).json({ success:false, message:"Too many attempts" });
+    if (new Date(row.expires_at) < new Date()) return res.status(400).json({ success: false, message: "Code expired" });
+    if (row.attempts >= 5) return res.status(400).json({ success: false, message: "Too many attempts" });
 
     await execute("UPDATE phone_otps SET attempts = attempts + 1 WHERE phone=?", [phone]);
 
     const ok = crypto.timingSafeEqual(Buffer.from(sha256(code)), Buffer.from(row.code_hash));
-    if (!ok) return res.status(400).json({ success:false, message:"Incorrect code" });
+    if (!ok) return res.status(400).json({ success: false, message: "Incorrect code" });
 
     const token = crypto.randomBytes(32).toString("hex");
-    const exp   = new Date(Date.now() + 15*60*1000);
+    const exp = new Date(Date.now() + 15 * 60 * 1000);
     await execute("INSERT INTO mfa_sessions (token, phone, expires_at) VALUES (?, ?, ?)", [token, phone, exp]);
 
     await execute("DELETE FROM phone_otps WHERE phone=?", [phone]);
 
-    return res.json({ success:true, old_phone_token: token });
+    return res.json({ success: true, old_phone_token: token });
   } catch (e) {
     console.error("mfa/reset/verify-current error:", e);
-    return res.status(500).json({ success:false, message:"Could not verify code." });
+    return res.status(500).json({ success: false, message: "Could not verify code." });
   }
 });
 
 /* =======================================================================
-   MFA RESET — NEW PHONE: send code (also honors whitelist/bypass)
+   MFA RESET — NEW PHONE
 ======================================================================= */
 router.post("/mfa/reset/request-new-sms", authenticateToken, async (req, res) => {
   try {
@@ -916,7 +957,6 @@ router.post("/mfa/reset/request-new-sms", authenticateToken, async (req, res) =>
       return res.status(400).json({ success: false, message: "New phone must be E.164 (e.g. +18095138195)." });
 
     const isUnlimited = UNLIMITED_SET.has(newPhone);
-
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const codeHash = sha256(code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -929,7 +969,7 @@ router.post("/mfa/reset/request-new-sms", authenticateToken, async (req, res) =>
 
     if (DEV_SMS_BYPASS && isUnlimited) {
       console.warn(`[DEV SMS BYPASS] OTP for ${newPhone}: ${code}`);
-      return res.json({ success: true, cooldown: 0, dev:true });
+      return res.json({ success: true, cooldown: 0, dev: true });
     }
 
     const body = otpBody(code);
@@ -943,20 +983,14 @@ router.post("/mfa/reset/request-new-sms", authenticateToken, async (req, res) =>
   }
 });
 
-/* =======================================================================
-   MFA RESET — NEW PHONE: verify -> returns new_phone_token
-======================================================================= */
 router.post("/mfa/reset/verify-new", authenticateToken, async (req, res) => {
   try {
     const newPhone = normalizePhone(req.body.new_phone);
-    const code     = String(req.body.code || "");
+    const code = String(req.body.code || "");
     if (!newPhone || !newPhone.startsWith("+"))
       return res.status(400).json({ success: false, message: "New phone must be E.164." });
 
-    const [rows] = await execute(
-      "SELECT * FROM phone_otps WHERE phone=? ORDER BY expires_at DESC LIMIT 1",
-      [newPhone]
-    );
+    const [rows] = await execute("SELECT * FROM phone_otps WHERE phone=? ORDER BY expires_at DESC LIMIT 1", [newPhone]);
     if (!rows.length) return res.status(400).json({ success: false, message: "Code not found" });
 
     const row = rows[0];
@@ -969,7 +1003,7 @@ router.post("/mfa/reset/verify-new", authenticateToken, async (req, res) => {
     if (!ok) return res.status(400).json({ success: false, message: "Incorrect code" });
 
     const token = crypto.randomBytes(32).toString("hex");
-    const exp   = new Date(Date.now() + 15 * 60 * 1000);
+    const exp = new Date(Date.now() + 15 * 60 * 1000);
     await execute("INSERT INTO mfa_sessions (token, phone, expires_at) VALUES (?, ?, ?)", [token, newPhone, exp]);
 
     await execute("DELETE FROM phone_otps WHERE phone=?", [newPhone]);
@@ -986,12 +1020,7 @@ router.post("/mfa/reset/verify-new", authenticateToken, async (req, res) => {
 ======================================================================= */
 router.post("/password/change", authenticateToken, async (req, res) => {
   const userId = req.user.userId;
-  const {
-    current_password = "",
-    new_password = "",
-    email_token = "",
-    old_phone_token = "",
-  } = req.body || {};
+  const { current_password = "", new_password = "", email_token = "", old_phone_token = "" } = req.body || {};
 
   try {
     if (!current_password || !new_password || !email_token || !old_phone_token) {
@@ -1002,7 +1031,7 @@ router.post("/password/change", authenticateToken, async (req, res) => {
     if (!strong.test(new_password)) {
       return res.status(400).json({
         success: false,
-        message: "Password must be 8+ chars incl. upper, lower, number and symbol."
+        message: "Password must be 8+ chars incl. upper, lower, number and symbol.",
       });
     }
 
@@ -1018,10 +1047,9 @@ router.post("/password/change", authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: "Email token invalid or expired. Please redo Step 1." });
     }
 
-    const [phRows] = await execute(
-      "SELECT phone FROM mfa_sessions WHERE token=? AND expires_at>NOW()",
-      [old_phone_token]
-    );
+    const [phRows] = await execute("SELECT phone FROM mfa_sessions WHERE token=? AND expires_at>NOW()", [
+      old_phone_token,
+    ]);
     if (!phRows.length) {
       return res.status(400).json({ success: false, message: "Phone verification expired. Please redo Step 2." });
     }
