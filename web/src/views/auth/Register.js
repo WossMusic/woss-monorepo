@@ -108,7 +108,20 @@ useEffect(() => {
 }, [coolReg]);
 
   const config = useWebsiteConfig();
-  if (!config) return <p>Loading...</p>;
+    // ---------- Show branded loader while config loads ----------
+  // while config loads
+    if (!config) {
+      return (
+        <div className="fw-loading-root">
+          <div className="fw-loader-container">
+            <div className="fw-loader" />
+            <p className="fw-loader-text">Loading...</p>
+          </div>
+        </div>
+      );
+    }
+
+
 
   const validatePassword = (password) => {
     const minLength = password.length >= 8;

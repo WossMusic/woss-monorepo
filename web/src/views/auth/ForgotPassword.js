@@ -12,25 +12,18 @@ function ForgotPassword() {
   const config = useWebsiteConfig();
 
   // ---------- Show branded loader while config loads ----------
-  if (!config) {
-    return (
-      <div
-        className="position-relative"
-        style={{
-          minHeight: "100vh",
-          background: "linear-gradient(180deg, #000 50%, #56BCB6 50%)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div className="loader-container">
-          <div className="loader" />
-          <p className="loader-text">Loading...</p>
-        </div>
+  // while config loads
+if (!config) {
+  return (
+    <div className="fw-loading-root">
+      <div className="fw-loader-container">
+        <div className="fw-loader" />
+        <p className="fw-loader-text">Loading...</p>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
 
   // ---------- API base resolution (NO default localhost) ----------
   const envBase = String(process.env.REACT_APP_API_BASE || "").trim();
