@@ -33,6 +33,14 @@ app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
 /* ----------------------------------------
+   1.1) Request logger (see Vercel function logs)
+----------------------------------------- */
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+/* ----------------------------------------
    2) GLOBAL CORS using websiteConfig.frontends
 ----------------------------------------- */
 function isAllowedOrigin(origin) {
@@ -127,12 +135,42 @@ app.use("/api", (req, res, next) => {
 
 /* ----------------------------------------
    6) Guarantee /api/website/config (and non-/api fallback)
+   Now returns a resolved domain and apiBase computed from the request.
 ----------------------------------------- */
-app.get("/api/website/config", (_req, res) => {
-  res.json({ success: true, config: websiteConfig });
+function computeApiBase(req) {
+  const proto =
+    req.headers["x-forwarded-proto"] ||
+    (req.secure ? "https" : "http") ||
+    "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  return `${proto}://${host}/api`;
+}
+
+function computeDomain(req) {
+  const proto =
+    req.headers["x-forwarded-proto"] ||
+    (req.secure ? "https" : "http") ||
+    "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  // Prefer configured name, but fill domain dynamically so the frontend can use it
+  const origin = req.headers.origin || "";
+  return websiteConfig.domain || origin || `${proto}://${host}`;
+}
+
+app.get("/api/website/config", (req, res) => {
+  const payload = {
+    success: true,
+    name: websiteConfig.name || "Woss Music",
+    domain: computeDomain(req),
+    apiBase: computeApiBase(req),
+    frontends: websiteConfig.frontends || [],
+  };
+  res.json(payload);
 });
+
+// legacy fallback
 app.use("/api/website", require("./routes/website"));
-app.use("/website", require("./routes/website")); // legacy fallback
+app.use("/website", require("./routes/website"));
 
 /* ----------------------------------------
    7) API routes (explicit prefixes; order matters)
@@ -167,13 +205,13 @@ app.get("/api/health", (_req, res) => {
    10) 404 / Error handlers
 ----------------------------------------- */
 app.use((req, res, next) => {
-  if (req.path.startsWith("/api/")) {
+  if ((req.path || "").startsWith("/api/")) {
     return res.status(404).json({ success: false, message: "Not Found" });
   }
   return next();
 });
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   console.error("Unhandled error:", err);
   res
     .status(err.status || 500)
