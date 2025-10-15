@@ -135,6 +135,15 @@ app.get("/api/website/config", (_req, res) => {
   res.json({ success: true, config: websiteConfig });
 });
 
+app.get("/api/health/db", async (_req, res) => {
+  try {
+    const [rows] = await execute("SELECT 1 AS ok");
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, code: e.code, message: e.message });
+  }
+});
+
 // Router mounts
 app.use("/api/website", require("./routes/website"));
 app.use("/website", require("./routes/website")); // fallback for legacy calls
