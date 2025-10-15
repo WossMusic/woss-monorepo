@@ -43,7 +43,13 @@ function Login() {
   const envBase = trim(process.env.REACT_APP_API_BASE || "");
   const hookBase = trim(config?.domain || "");
   const API_BASE = strip(envBase || hookBase);
-  const apiMissing = !API_BASE;
+
+  // Normalize so we ALWAYS call `${API_ROOT}/auth/...` (exactly one `/api`)
+  const API_ROOT = /\/api\/?$/.test(API_BASE)
+    ? API_BASE.replace(/\/+$/, "")
+    : `${API_BASE}/api`;
+
+  const apiMissing = !API_BASE; // nothing provided at all
 
   const getHomePath = (role) => {
     const r = String(role || "").trim().toLowerCase();
@@ -76,7 +82,7 @@ function Login() {
     if (apiMissing) return triggerErrorPopup();
     try {
       setOtpSending(true);
-      const res = await fetch(`${API_BASE}/api/auth/login/request-otp`, {
+      const res = await fetch(`${API_ROOT}/auth/login/request-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -105,7 +111,7 @@ function Login() {
     if (code.length !== 6) return;
     try {
       setOtpVerifying(true);
-      const res = await fetch(`${API_BASE}/api/auth/login/verify-otp`, {
+      const res = await fetch(`${API_ROOT}/auth/login/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code, remember: remember30 }),
@@ -136,13 +142,15 @@ function Login() {
     setShowError(false);
 
     if (apiMissing) {
-      console.error("API base is missing. Set REACT_APP_API_BASE or ensure config.domain is returned.");
+      console.error(
+        "API base is missing. Set REACT_APP_API_BASE or ensure config.domain is returned."
+      );
       return triggerErrorPopup();
     }
 
     try {
       const trust = localStorage.getItem("woss_mfa_trust") || "";
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(`${API_ROOT}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, mfa_trust_token: trust }),
@@ -150,7 +158,9 @@ function Login() {
 
       if (res.status === 403) {
         let data = {};
-        try { data = await res.json(); } catch (_) {}
+        try {
+          data = await res.json();
+        } catch (_) {}
 
         // Pending account route still supported
         if (data?.pending && data?.account_status === "Pending Verification") {
@@ -236,16 +246,16 @@ function Login() {
   // ---- Loader while config is fetching ----
   if (!config) {
     return (
-    <div class="fw-loading-root">
-  <div class="fw-loader-container">
-    <div class="fw-loader-plate">
-      <div class="fw-loader"></div>
-    </div>
-  </div>
-</div>
-
+      <div className="fw-loading-root">
+        <div className="fw-loader-container">
+          <div className="fw-loader-plate">
+            <div className="fw-loader"></div>
+          </div>
+        </div>
+      </div>
     );
   }
+
   return (
     <>
       {showError && (
@@ -333,7 +343,10 @@ function Login() {
 
               {/* Remember MFA for 30 days */}
               <FormGroup check className="mt-2 mb-4 text-left">
-                <label className="form-check-label text-muted" style={{ fontSize: "0.95rem" }}>
+                <label
+                  className="form-check-label text-muted"
+                  style={{ fontSize: "0.95rem" }}
+                >
                   <input
                     type="checkbox"
                     className="form-check-input mr-2"
@@ -359,9 +372,7 @@ function Login() {
                   onMouseOver={(e) =>
                     (e.target.style.textDecoration = "underline")
                   }
-                  onMouseOut={(e) =>
-                    (e.target.style.textDecoration = "none")
-                  }
+                  onMouseOut={(e) => (e.target.style.textDecoration = "none")}
                 >
                   Click here if you forgot password
                 </Link>
