@@ -11,7 +11,26 @@ function ForgotPassword() {
   const navigate = useNavigate();
   const config = useWebsiteConfig();
 
-  if (!config) return <p>Loading...</p>;
+  // ---------- Show branded loader while config loads ----------
+  if (!config) {
+    return (
+      <div
+        className="position-relative"
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(180deg, #000 50%, #56BCB6 50%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div className="loader-container">
+          <div className="loader" />
+          <p className="loader-text">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ---------- API base resolution (NO default localhost) ----------
   const envBase = String(process.env.REACT_APP_API_BASE || "").trim();
@@ -131,7 +150,9 @@ function ForgotPassword() {
 
             <Form onSubmit={handleForgotPassword}>
               <FormGroup className="mb-4">
-                <label style={{ fontSize: "0.9rem", fontWeight: "600", marginBottom: "6px", float: "left" }}>
+                <label
+                  style={{ fontSize: "0.9rem", fontWeight: "600", marginBottom: "6px", float: "left" }}
+                >
                   Email
                 </label>
                 <Input
