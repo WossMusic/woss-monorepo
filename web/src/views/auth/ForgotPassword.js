@@ -15,10 +15,11 @@ function ForgotPassword() {
   // while config loads
 if (!config) {
   return (
-    <div className="fw-loading-root">
-      <div className="fw-loader-container">
-        <div className="fw-loader" />
-        <p className="fw-loader-text">Loading...</p>
+    <div class="fw-loading-root">
+      <div class="fw-loader-container">
+        <div class="fw-loader-plate">
+          <div class="fw-loader"></div>
+        </div>
       </div>
     </div>
   );
