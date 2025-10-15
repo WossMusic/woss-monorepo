@@ -241,7 +241,6 @@ function Login() {
     <div class="fw-loader-plate">
       <div class="fw-loader"></div>
     </div>
-    <p class="fw-loader-text">Loading...</p>
   </div>
 </div>
 
