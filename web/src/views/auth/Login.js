@@ -236,21 +236,15 @@ function Login() {
   // ---- Loader while config is fetching ----
   if (!config) {
     return (
-      <div
-        className="position-relative"
-        style={{
-          minHeight: "100vh",
-          background: "linear-gradient(180deg, #000 50%, #56BCB6 50%)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div className="loader-container">
-          <div className="loader" />
-          <p className="loader-text">Loading...</p>
-        </div>
-      </div>
+    <div class="fw-loading-root">
+  <div class="fw-loader-container">
+    <div class="fw-loader-plate">
+      <div class="fw-loader"></div>
+    </div>
+    <p class="fw-loader-text">Loading...</p>
+  </div>
+</div>
+
     );
   }
   return (
