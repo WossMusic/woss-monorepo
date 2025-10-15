@@ -1,3 +1,4 @@
+// web/src/views/auth/Login.js
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
@@ -14,12 +15,15 @@ import {
 } from "reactstrap";
 import useWebsiteConfig from "hooks/useWebsiteConfig";
 
+const trim = (s) => String(s || "").trim();
+const strip = (s) => trim(s).replace(/\/+$/, "");
+
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember30, setRemember30] = useState(true);
 
-  // error popup (same style you already use)
+  // error popup
   const [showError, setShowError] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
 
@@ -34,6 +38,12 @@ function Login() {
   const otpRefs = useRef([]);
   const navigate = useNavigate();
   const config = useWebsiteConfig();
+
+  // ---- Resolve API base (env first, then hook) ----
+  const envBase = trim(process.env.REACT_APP_API_BASE || "");
+  const hookBase = trim(config?.domain || "");
+  const API_BASE = strip(envBase || hookBase);
+  const apiMissing = !API_BASE;
 
   const getHomePath = (role) => {
     const r = String(role || "").trim().toLowerCase();
@@ -63,15 +73,16 @@ function Login() {
 
   // request login OTP and open modal
   const openOtp = async () => {
+    if (apiMissing) return triggerErrorPopup();
     try {
       setOtpSending(true);
-      const res = await fetch(`${config.domain}/api/auth/login/request-otp`, {
+      const res = await fetch(`${API_BASE}/api/auth/login/request-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success) {
         setPhoneHint(data.phone_hint || "");
         setOtpDigits(["", "", "", "", "", ""]);
         setOtpOpen(true);
@@ -89,25 +100,24 @@ function Login() {
 
   // verify login OTP
   const verifyOtp = async () => {
+    if (apiMissing) return triggerErrorPopup();
     const code = otpDigits.join("");
     if (code.length !== 6) return;
     try {
       setOtpVerifying(true);
-      const res = await fetch(`${config.domain}/api/auth/login/verify-otp`, {
+      const res = await fetch(`${API_BASE}/api/auth/login/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code, remember: remember30 }),
       });
-      const data = await res.json();
-      if (res.ok && data.success && data.token) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success && data?.token) {
         if (data.mfa_trust_token) {
           localStorage.setItem("woss_mfa_trust", data.mfa_trust_token);
         }
         localStorage.setItem("woss_token", data.token);
         localStorage.setItem("woss_user", JSON.stringify(data.user));
         setOtpOpen(false);
-
-        // ✅ role-based landing
         navigate(getHomePath(data?.user?.role), { replace: true });
       } else {
         triggerErrorPopup();
@@ -125,9 +135,14 @@ function Login() {
     e.preventDefault();
     setShowError(false);
 
+    if (apiMissing) {
+      console.error("API base is missing. Set REACT_APP_API_BASE or ensure config.domain is returned.");
+      return triggerErrorPopup();
+    }
+
     try {
       const trust = localStorage.getItem("woss_mfa_trust") || "";
-      const res = await fetch(`${config.domain}/api/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, mfa_trust_token: trust }),
@@ -135,9 +150,7 @@ function Login() {
 
       if (res.status === 403) {
         let data = {};
-        try {
-          data = await res.json();
-        } catch (_) {}
+        try { data = await res.json(); } catch (_) {}
 
         // Pending account route still supported
         if (data?.pending && data?.account_status === "Pending Verification") {
@@ -157,11 +170,10 @@ function Login() {
       }
 
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (data?.token) {
           localStorage.setItem("woss_token", data.token);
           localStorage.setItem("woss_user", JSON.stringify(data.user));
-          // ✅ role-based landing (trusted device flow)
           navigate(getHomePath(data?.user?.role), { replace: true });
           return;
         }
@@ -221,6 +233,26 @@ function Login() {
     otpRefs.current?.[Math.min(digits.length, 6) - 1]?.focus();
   };
 
+  // ---- Loader while config is fetching ----
+  if (!config) {
+    return (
+      <div
+        className="position-relative"
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(180deg, #000 50%, #56BCB6 50%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div className="loader-container">
+          <div className="loader" />
+          <p className="loader-text">Loading...</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <>
       {showError && (
