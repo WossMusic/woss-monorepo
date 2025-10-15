@@ -352,24 +352,32 @@ router.post("/login", async (req, res) => {
   const emailLower = String(req.body.email || "").trim().toLowerCase();
   const { password, mfa_trust_token } = req.body;
 
-  // MFA policy:
-  // - Default: ON in production, OFF in dev
-  // - Override with env LOGIN_MFA=on|off
   const envFlag = String(process.env.LOGIN_MFA || "").toLowerCase();
-  const isProd = String(process.env.NODE_ENV || "development") === "production";
-  const MFA_REQUIRED = envFlag
-    ? envFlag !== "off"
-    : isProd; // prod => true, dev => false
+  const isProd  = String(process.env.NODE_ENV || "development") === "production";
+  const MFA_REQUIRED = envFlag ? envFlag !== "off" : isProd; // prod => true, dev => false
 
   try {
     const [users] = await execute("SELECT * FROM users WHERE email = ?", [emailLower]);
-    if (!users.length) return res.status(400).json({ error: "Email not found." });
+    if (!users.length) {
+      return res.status(400).json({ success:false, error: "Email not found." });
+    }
 
     const user = users[0];
 
-    // Password check
-    const match = await compare(password, user.password || "");
-    if (!match) return res.status(401).json({ error: "Incorrect password." });
+    // Guard: missing/invalid hash should NOT throw
+    const hash = user.password || "";
+    if (!hash || typeof hash !== "string" || !hash.startsWith("$2")) {
+      return res.status(400).json({
+        success: false,
+        error: "Password not set for this account. Please reset your password."
+      });
+    }
+
+    // Password check (returns false on mismatch; no throws)
+    const match = await compare(password, hash);
+    if (!match) {
+      return res.status(401).json({ success:false, error: "Incorrect password." });
+    }
 
     // Account status gate
     if (user.account_status && user.account_status !== "Active") {
@@ -388,12 +396,16 @@ router.post("/login", async (req, res) => {
         [user.id, sha256(mfa_trust_token)]
       );
       if (trust.length) {
+        if (!process.env.JWT_SECRET) {
+          return res.status(500).json({ success:false, error:"JWT secret missing on server." });
+        }
         const token = sign(
           { userId: user.id, email: user.email, role: user.role },
           process.env.JWT_SECRET,
           { expiresIn: "12h" }
         );
         return res.json({
+          success: true,
           token,
           user: {
             id: user.id,
@@ -409,13 +421,16 @@ router.post("/login", async (req, res) => {
     const hasPhone = !!String(user.phone || "").trim();
 
     if (!MFA_REQUIRED) {
-      // Dev / explicitly disabled MFA: issue token directly
+      if (!process.env.JWT_SECRET) {
+        return res.status(500).json({ success:false, error:"JWT secret missing on server." });
+      }
       const token = sign(
         { userId: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn: "12h" }
       );
       return res.json({
+        success: true,
         token,
         user: {
           id: user.id,
@@ -429,7 +444,6 @@ router.post("/login", async (req, res) => {
 
     // MFA required (production or forced on)
     if (!hasPhone) {
-      // In prod with MFA required and no phone on file → block with clear guidance
       return res.status(403).json({
         mfa_required: true,
         setup_required: true,
@@ -438,7 +452,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Require OTP step on the client (then use /login/request-otp and /login/verify-otp)
+    // Require OTP on the client
     return res.status(403).json({
       mfa_required: true,
       email: emailLower,
@@ -446,9 +460,10 @@ router.post("/login", async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
-    return res.status(500).json({ error: "Login failed." });
+    return res.status(500).json({ success:false, error: "Login failed." });
   }
 });
+
 
 
 // Login: send OTP by resolving phone from email
