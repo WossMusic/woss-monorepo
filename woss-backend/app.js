@@ -140,9 +140,8 @@ app.use("/api/website", require("./routes/website"));
 app.use("/website", require("./routes/website")); // fallback for legacy calls
 
 /* ----------------------------------------
-   7) Other API routes (order matters: keep after specific mounts)
+   7) Other API routes (order matters: keep specific first)
 ----------------------------------------- */
-app.use("/api", require("./routes/distribute"));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/user", require("./routes/user"));
@@ -154,6 +153,9 @@ app.use("/api/permissions", require("./routes/permissions"));
 app.use("/api/withdrawals", require("./routes/withdrawals"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/system", require("./routes/system"));
+
+// ⬇️ IMPORTANT: don't mount this at "/api"
+app.use("/api/distribute", require("./routes/distribute"));
 
 /* ----------------------------------------
    8) Static exports (open)
@@ -180,9 +182,9 @@ app.use((req, res, next) => {
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);
-  res
-    .status(err.status || 500)
-    .json({ success: false, message: err.message || "Server Error" });
+  // If someone threw an Error("Not Found") without a status, don't mask it as 500
+  const status = err.status || (err.message === "Not Found" ? 404 : 500);
+  res.status(status).json({ success: false, message: err.message || "Server Error" });
 });
 
 /* ----------------------------------------
