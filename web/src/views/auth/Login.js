@@ -43,13 +43,15 @@ function Login() {
   const envBase = trim(process.env.REACT_APP_API_BASE || "");
   const hookBase = trim(config?.domain || "");
   const API_BASE = strip(envBase || hookBase);
+  const apiMissing = !API_BASE;
 
-  // Normalize so we ALWAYS call `${API_ROOT}/auth/...` (exactly one `/api`)
-  const API_ROOT = /\/api\/?$/.test(API_BASE)
-    ? API_BASE.replace(/\/+$/, "")
-    : `${API_BASE}/api`;
-
-  const apiMissing = !API_BASE; // nothing provided at all
+  // Build an absolute API URL that ALWAYS contains exactly one `/api`
+  const api = (path = "") => {
+    const baseHasApi = /\/api\/?$/.test(API_BASE);
+    const root = baseHasApi ? API_BASE.replace(/\/+$/, "") : `${API_BASE}/api`;
+    const p = String(path || "");
+    return `${root}${p.startsWith("/") ? p : `/${p}`}`;
+  };
 
   const getHomePath = (role) => {
     const r = String(role || "").trim().toLowerCase();
@@ -82,7 +84,7 @@ function Login() {
     if (apiMissing) return triggerErrorPopup();
     try {
       setOtpSending(true);
-      const res = await fetch(`${API_ROOT}/auth/login/request-otp`, {
+      const res = await fetch(api("auth/login/request-otp"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -111,7 +113,7 @@ function Login() {
     if (code.length !== 6) return;
     try {
       setOtpVerifying(true);
-      const res = await fetch(`${API_ROOT}/auth/login/verify-otp`, {
+      const res = await fetch(api("auth/login/verify-otp"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code, remember: remember30 }),
@@ -150,7 +152,7 @@ function Login() {
 
     try {
       const trust = localStorage.getItem("woss_mfa_trust") || "";
-      const res = await fetch(`${API_ROOT}/auth/login`, {
+      const res = await fetch(api("auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, mfa_trust_token: trust }),
