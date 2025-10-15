@@ -402,7 +402,7 @@ useEffect(() => {
         <Container fluid className="px-0">
           <div className="form-wrapper">
             <Card className="bg-white rounded-0 w-100 card-register">
-              <CardHeader className="bg-transparent text-center">
+              <CardHeader className="bg-transparent text-center mt-4">
                 <h1 className="text-center text-dark">
                   {step === 1 && "Welcome!"}
                   {step === 2 && "Woss Music Account"}
