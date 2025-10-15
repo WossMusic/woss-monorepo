@@ -30982,10 +30982,9 @@ a.badge-sidebar:focus {
   border-radius: 10rem;
 }
 
-/* ===== Woss Frontend Loader (Auth pages, etc.) ===== */
 .fw-loading-root {
   min-height: 100vh;
-  background: linear-gradient(180deg, #000 50%, #56BCB6 50%);
+  background: linear-gradient(180deg, #000 50%, var(--primary) 50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -30999,11 +30998,26 @@ a.badge-sidebar:focus {
   gap: 12px;
 }
 
+/* White circular “plate” that holds the spinner */
+.fw-loader-plate {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+/* Spinner matches the Login.js style but uses the brand teal */
 .fw-loader {
   width: 56px;
   height: 56px;
-  border: 4px solid rgba(255, 255, 255, 0.25);
-  border-top-color: #ffffff;
+  border: 4px solid rgba(86, 188, 182, 0.25); /* faint ring */
+  border-top-color: var(--primary);         /* animated accent */
   border-radius: 50%;
   animation: fw-spin 0.9s linear infinite;
 }
@@ -31015,6 +31029,11 @@ a.badge-sidebar:focus {
   margin: 0;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   user-select: none;
+}
+
+/* Motion respect */
+@media (prefers-reduced-motion: reduce) {
+  .fw-loader { animation: none; }
 }
 
 @keyframes fw-spin {
