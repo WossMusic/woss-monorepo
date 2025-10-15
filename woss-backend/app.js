@@ -6,10 +6,7 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 
 const verifyToken = require("./middleware/verifyToken");
-
-// config/db exports both corsOptions (if you still want it) and websiteConfig
 const { websiteConfig } = require("./config/db");
-
 const {
   ensureDirs,
   UPLOADS_DIR,
@@ -36,8 +33,7 @@ app.use(express.json({ limit: "250mb" }));
 app.use(express.urlencoded({ extended: true, limit: "250mb" }));
 
 /* ----------------------------------------
-   2) GLOBAL CORS (works for 200/404/500 + preflights)
-      Uses websiteConfig.frontends as the allow-list
+   2) GLOBAL CORS using websiteConfig.frontends
 ----------------------------------------- */
 function isAllowedOrigin(origin) {
   try {
@@ -76,7 +72,7 @@ app.use((req, res, next) => {
 });
 
 /* ----------------------------------------
-   3) Root + favicon (reduce noise)
+   3) Root + favicon
 ----------------------------------------- */
 app.get("/", (_req, res) => {
   res
@@ -86,7 +82,7 @@ app.get("/", (_req, res) => {
 app.get("/favicon.ico", (_req, res) => res.sendStatus(204));
 
 /* ----------------------------------------
-   4) Static (read-only on Vercel; writable /tmp is handled by utils/paths)
+   4) Static (read-only on Vercel)
 ----------------------------------------- */
 app.use("/uploads", express.static(UPLOADS_DIR));
 app.use(
@@ -104,15 +100,17 @@ app.use(
   })
 );
 
-// Optional local public folder (harmless on Vercel)
+// Optional local public folder
 app.use(express.static(path.join(__dirname, "../public")));
 
 // Images in repo (read-only)
-app.use("/assets/images", express.static(path.join(__dirname, "src", "assets", "images")));
+app.use(
+  "/assets/images",
+  express.static(path.join(__dirname, "src", "assets", "images"))
+);
 
 /* ----------------------------------------
-   5) Open/guard wall for /api/*
-   (health + website + exports are open)
+   5) Open/guard wall for /api/* (auth/website/health/exports remain open)
 ----------------------------------------- */
 app.use("/api", (req, res, next) => {
   const p = (req.path || "").toLowerCase();
@@ -130,26 +128,14 @@ app.use("/api", (req, res, next) => {
 /* ----------------------------------------
    6) Guarantee /api/website/config (and non-/api fallback)
 ----------------------------------------- */
-// Explicit handler so nothing can shadow it
 app.get("/api/website/config", (_req, res) => {
   res.json({ success: true, config: websiteConfig });
 });
-
-app.get("/api/health/db", async (_req, res) => {
-  try {
-    const [rows] = await execute("SELECT 1 AS ok");
-    res.json({ ok: true, rows });
-  } catch (e) {
-    res.status(500).json({ ok: false, code: e.code, message: e.message });
-  }
-});
-
-// Router mounts
 app.use("/api/website", require("./routes/website"));
-app.use("/website", require("./routes/website")); // fallback for legacy calls
+app.use("/website", require("./routes/website")); // legacy fallback
 
 /* ----------------------------------------
-   7) Other API routes (order matters: keep specific first)
+   7) API routes (explicit prefixes; order matters)
 ----------------------------------------- */
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
@@ -162,9 +148,7 @@ app.use("/api/permissions", require("./routes/permissions"));
 app.use("/api/withdrawals", require("./routes/withdrawals"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/system", require("./routes/system"));
-
-// ⬇️ IMPORTANT: don't mount this at "/api"
-app.use("/api/distribute", require("./routes/distribute"));
+app.use("/api/distribute", require("./routes/distribute")); // ⬅️ was generic "/api"
 
 /* ----------------------------------------
    8) Static exports (open)
@@ -180,7 +164,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 /* ----------------------------------------
-   10) 404 / Error handlers (leave CORS headers set already)
+   10) 404 / Error handlers
 ----------------------------------------- */
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) {
@@ -191,9 +175,9 @@ app.use((req, res, next) => {
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);
-  // If someone threw an Error("Not Found") without a status, don't mask it as 500
-  const status = err.status || (err.message === "Not Found" ? 404 : 500);
-  res.status(status).json({ success: false, message: err.message || "Server Error" });
+  res
+    .status(err.status || 500)
+    .json({ success: false, message: err.message || "Server Error" });
 });
 
 /* ----------------------------------------
