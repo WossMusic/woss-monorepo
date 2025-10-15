@@ -14,11 +14,11 @@ let pool;
 function getPool() {
   if (!pool) {
     pool = mysql.createPool({
-      host: process.env.DB_HOST || "localhost",
+      host: process.env.DB_HOST || "crossover.proxy.rlwy.net",
       user: process.env.DB_USER || "root",
-      password: process.env.DB_PASS || "",
+      password: process.env.DB_PASS || "aVUJWKwCStnJlRgbGTMRZdSvzuwbLqqn",
       database: process.env.DB_NAME || "woss_portal",
-      port: toInt(process.env.DB_PORT, 3306),
+      port: toInt(process.env.DB_PORT, 27176),
       waitForConnections: true,
       connectionLimit: toInt(process.env.DB_POOL_SIZE, 10),
       queueLimit: 0,
