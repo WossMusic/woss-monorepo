@@ -401,7 +401,7 @@ useEffect(() => {
       <div className="white-body">
         <Container fluid className="px-0">
           <div className="form-wrapper">
-            <Card className="bg-white border-0 rounded-0 w-100 card-register">
+            <Card className="bg-white rounded-0 w-100 card-register">
               <CardHeader className="bg-transparent text-center">
                 <h1 className="text-center text-dark">
                   {step === 1 && "Welcome!"}
